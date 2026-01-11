@@ -1,0 +1,37 @@
+[package]
+name = "lunarcore"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+esp-idf-hal = { version = "0.45", features = ["critical-section"] }
+esp-idf-svc = "0.51"
+esp-idf-sys = { version = "0.36", features = ["binstart"] }
+embedded-hal = "1.0"
+embedded-io = "0.6"
+heapless = "0.8"
+nb = "1.1"
+critical-section = "1.2"
+log = "0.4"
+
+[build-dependencies]
+embuild = "0.33"
+
+[features]
+default = ["ble"]
+ble = []
+meshtastic = []
+rnode = []
+
+[profile.release]
+opt-level = "s"
+lto = false
+codegen-units = 1
+
+[profile.dev]
+opt-level = "z"
+
+[[bin]]
+name = "lunarcore"
+path = "src/main.rs"
