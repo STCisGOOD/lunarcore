@@ -10,17 +10,24 @@ pub use encryption::*;
 
 use heapless::Vec;
 
+
 pub const SERIAL_SYNC: [u8; 2] = [0x94, 0xC3];
+
 
 pub const MAX_MESSAGE_SIZE: usize = 512;
 
+
 pub const LORA_HEADER_SIZE: usize = 16;
+
 
 pub const MAX_LORA_PAYLOAD: usize = 237;
 
+
 pub const MIC_SIZE: usize = 4;
 
+
 pub const DEFAULT_HOP_LIMIT: u8 = 3;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
@@ -78,6 +85,7 @@ impl From<u32> for PortNum {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct MeshPacket {
 
@@ -104,6 +112,7 @@ pub struct MeshPacket {
     pub payload: PacketPayload,
 }
 
+
 #[derive(Debug, Clone)]
 pub enum PacketPayload {
 
@@ -111,6 +120,7 @@ pub enum PacketPayload {
 
     Decoded(DataPayload),
 }
+
 
 #[derive(Debug, Clone)]
 pub struct DataPayload {
@@ -131,6 +141,7 @@ pub struct DataPayload {
 
     pub emoji: u32,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -190,6 +201,7 @@ impl Default for DataPayload {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct NodeInfo {
 
@@ -203,6 +215,7 @@ pub struct NodeInfo {
 
     pub snr: f32,
 }
+
 
 #[derive(Debug, Clone)]
 pub struct User {
@@ -219,6 +232,7 @@ pub struct User {
 
     pub role: Role,
 }
+
 
 #[derive(Debug, Clone, Default)]
 pub struct Position {
@@ -254,6 +268,7 @@ pub struct Position {
     pub seq_number: u32,
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum LocationSource {
@@ -263,6 +278,7 @@ pub enum LocationSource {
     InternalGps = 2,
     ExternalGps = 3,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
@@ -311,6 +327,7 @@ impl Default for HardwareModel {
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Role {
@@ -333,6 +350,7 @@ impl Default for Role {
     }
 }
 
+
 pub struct MeshtasticHandler {
 
     pub node_id: u32,
@@ -352,6 +370,7 @@ pub struct MeshtasticHandler {
     pub user: Option<User>,
 
     parser: MeshtasticParser,
+
 
     pending_responses: heapless::Deque<Vec<u8, MAX_MESSAGE_SIZE>, 16>,
 
@@ -379,9 +398,11 @@ impl MeshtasticHandler {
         }
     }
 
+
     pub fn set_channel_key(&mut self, psk: &[u8]) {
         self.primary_channel.set_key(psk);
     }
+
 
     pub fn next_packet_id(&mut self) -> u32 {
         self.last_packet_id = self.last_packet_id.wrapping_add(1);
@@ -391,15 +412,19 @@ impl MeshtasticHandler {
         self.last_packet_id
     }
 
+
     pub fn process_lora_packet(&mut self, data: &[u8], rssi: i32, snr: f32) -> Option<MeshPacket> {
         if data.len() < LORA_HEADER_SIZE + MIC_SIZE {
             return None;
         }
 
+
         let mut packet = packet::parse_lora_packet(data)?;
+
 
         packet.rx_rssi = rssi;
         packet.rx_snr = snr;
+
 
         let decrypted = self.decrypt_packet(&packet)?;
 
@@ -407,6 +432,7 @@ impl MeshtasticHandler {
 
         Some(decrypted)
     }
+
 
     fn decrypt_packet(&self, packet: &MeshPacket) -> Option<MeshPacket> {
         let mut result = packet.clone();
@@ -421,7 +447,9 @@ impl MeshtasticHandler {
                     .as_ref()?
             };
 
+
             let decrypted = channel.decrypt(packet.id, packet.from, encrypted)?;
+
 
             if let Some(data) = protobuf::decode_data(&decrypted) {
                 result.payload = PacketPayload::Decoded(data);
@@ -430,6 +458,7 @@ impl MeshtasticHandler {
 
         Some(result)
     }
+
 
     pub fn create_packet(
         &mut self,
@@ -440,6 +469,7 @@ impl MeshtasticHandler {
     ) -> Option<Vec<u8, 256>> {
         let packet_id = self.next_packet_id();
 
+
         let data = DataPayload {
             port,
             payload: Vec::from_slice(payload).ok()?,
@@ -449,9 +479,12 @@ impl MeshtasticHandler {
             ..Default::default()
         };
 
+
         let encoded = protobuf::encode_data(&data)?;
 
+
         let encrypted = self.primary_channel.encrypt(packet_id, self.node_id, &encoded)?;
+
 
         let lora_packet = packet::build_lora_packet(
             self.node_id,
@@ -468,9 +501,11 @@ impl MeshtasticHandler {
         Some(lora_packet)
     }
 
+
     pub fn create_text_message(&mut self, to: u32, text: &str) -> Option<Vec<u8, 256>> {
         self.create_packet(to, PortNum::TextMessage, text.as_bytes(), true)
     }
+
 
     pub fn create_position_packet(&mut self) -> Option<Vec<u8, 256>> {
         let position = self.position.as_ref()?;
@@ -478,11 +513,13 @@ impl MeshtasticHandler {
         self.create_packet(0xFFFFFFFF, PortNum::Position, &encoded, false)
     }
 
+
     pub fn create_node_info_packet(&mut self) -> Option<Vec<u8, 256>> {
         let user = self.user.as_ref()?;
         let encoded = protobuf::encode_user(user)?;
         self.create_packet(0xFFFFFFFF, PortNum::NodeInfo, &encoded, false)
     }
+
 
     pub fn parse_serial_frame(&self, data: &[u8]) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
         if data.len() < 4 {
@@ -503,6 +540,7 @@ impl MeshtasticHandler {
         Some(payload)
     }
 
+
     pub fn build_serial_frame(&self, payload: &[u8]) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
         let mut frame = Vec::new();
         frame.push(SERIAL_SYNC[0]).ok()?;
@@ -514,9 +552,11 @@ impl MeshtasticHandler {
         Some(frame)
     }
 
+
     pub fn feed_serial(&mut self, byte: u8) -> Option<MeshtasticFrame> {
         self.parser.feed(byte)
     }
+
 
     pub fn build_lora_packet(&mut self, frame: &MeshtasticFrame) -> Option<Vec<u8, 256>> {
 
@@ -524,7 +564,9 @@ impl MeshtasticHandler {
             return None;
         }
 
+
         let payload = &frame.payload;
+
 
         if payload.len() < 2 {
             return None;
@@ -541,6 +583,7 @@ impl MeshtasticHandler {
         }
 
         let mesh_packet_data = &payload[2..2 + mesh_packet_len];
+
 
         let mut to: u32 = 0xFFFFFFFF;
         let mut channel: u8 = 0;
@@ -661,14 +704,18 @@ impl MeshtasticHandler {
             }
         }
 
+
         let payload_data = inner_payload?;
+
 
         self.create_packet(to, port, &payload_data, want_ack)
     }
 
+
     pub fn reset_parser(&mut self) {
         self.parser.reset();
     }
+
 
     pub fn process_toradio(&mut self, frame: &MeshtasticFrame) -> Option<ToRadioResponse> {
         if frame.payload.is_empty() {
@@ -691,10 +738,12 @@ impl MeshtasticHandler {
                 self.build_lora_packet(frame).map(ToRadioResponse::LoRaPacket)
             }
 
+
             (3, 0) => {
                 let (config_id, _) = decode_varint(&payload[1..]);
                 self.build_config_response(config_id as u32)
             }
+
 
             (4, 0) => {
 
@@ -706,23 +755,28 @@ impl MeshtasticHandler {
         }
     }
 
+
     fn build_config_response(&mut self, config_id: u32) -> Option<ToRadioResponse> {
 
         self.pending_responses.clear();
         self.config_request_id = config_id;
         self.config_channel_index = 0;
 
+
         if let Some(my_info) = self.encode_privacy_myinfo() {
             let _ = self.pending_responses.push_back(my_info);
         }
+
 
         if let Some(node_info) = self.encode_privacy_nodeinfo() {
             let _ = self.pending_responses.push_back(node_info);
         }
 
+
         if let Some(channel_config) = self.encode_channel_config(0) {
             let _ = self.pending_responses.push_back(channel_config);
         }
+
 
         for i in 0..7 {
             if self.secondary_channels[i].is_some() {
@@ -732,47 +786,61 @@ impl MeshtasticHandler {
             }
         }
 
+
         if let Some(complete) = self.encode_config_complete(config_id) {
             let _ = self.pending_responses.push_back(complete);
         }
 
+
         self.pending_responses.pop_front().map(ToRadioResponse::FromRadio)
     }
+
 
     pub fn poll_pending_response(&mut self) -> Option<ToRadioResponse> {
         self.pending_responses.pop_front().map(ToRadioResponse::FromRadio)
     }
 
+
     pub fn has_pending_responses(&self) -> bool {
         !self.pending_responses.is_empty()
     }
+
 
     pub fn pending_response_count(&self) -> usize {
         self.pending_responses.len()
     }
 
+
     fn encode_privacy_myinfo(&self) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
         let mut buf: Vec<u8, MAX_MESSAGE_SIZE> = Vec::new();
+
 
         let _ = write_tag(1, WIRE_VARINT, &mut buf);
         let _ = encode_varint(0, &mut buf);
 
+
         let mut my_info: Vec<u8, 64> = Vec::new();
+
 
         let _ = write_tag(1, WIRE_VARINT, &mut my_info);
         let _ = encode_varint(self.node_id as u64, &mut my_info);
 
+
         let _ = write_tag(3, WIRE_VARINT, &mut my_info);
         let _ = encode_varint(30000, &mut my_info);
+
 
         let _ = write_tag(4, WIRE_VARINT, &mut my_info);
         let _ = encode_varint(8, &mut my_info);
 
+
         let _ = write_tag(6, WIRE_VARINT, &mut my_info);
         let _ = encode_varint(0, &mut my_info);
 
+
         let _ = write_tag(7, WIRE_VARINT, &mut my_info);
         let _ = encode_varint(1, &mut my_info);
+
 
         let _ = write_tag(4, WIRE_LEN, &mut buf);
         let _ = encode_varint(my_info.len() as u64, &mut buf);
@@ -781,23 +849,30 @@ impl MeshtasticHandler {
         Some(buf)
     }
 
+
     fn encode_privacy_nodeinfo(&self) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
         let mut buf: Vec<u8, MAX_MESSAGE_SIZE> = Vec::new();
+
 
         let _ = write_tag(1, WIRE_VARINT, &mut buf);
         let _ = encode_varint(0, &mut buf);
 
+
         let mut node_info: Vec<u8, 128> = Vec::new();
+
 
         let _ = write_tag(1, WIRE_VARINT, &mut node_info);
         let _ = encode_varint(self.node_id as u64, &mut node_info);
 
+
         let mut user: Vec<u8, 64> = Vec::new();
+
 
         let id_str = format_node_id(self.node_id);
         let _ = write_tag(1, WIRE_LEN, &mut user);
         let _ = encode_varint(id_str.len() as u64, &mut user);
         let _ = user.extend_from_slice(id_str.as_bytes());
+
 
         if let Some(ref u) = self.user {
             let _ = write_tag(2, WIRE_LEN, &mut user);
@@ -810,6 +885,7 @@ impl MeshtasticHandler {
             let _ = user.extend_from_slice(name);
         }
 
+
         if let Some(ref u) = self.user {
             let _ = write_tag(3, WIRE_LEN, &mut user);
             let _ = encode_varint(u.short_name.len() as u64, &mut user);
@@ -821,15 +897,19 @@ impl MeshtasticHandler {
             let _ = user.extend_from_slice(short);
         }
 
+
         let _ = write_tag(5, WIRE_VARINT, &mut user);
         let _ = encode_varint(43, &mut user);
+
 
         let _ = write_tag(7, WIRE_VARINT, &mut user);
         let _ = encode_varint(4, &mut user);
 
+
         let _ = write_tag(2, WIRE_LEN, &mut node_info);
         let _ = encode_varint(user.len() as u64, &mut node_info);
         let _ = node_info.extend_from_slice(&user);
+
 
         let _ = write_tag(6, WIRE_LEN, &mut buf);
         let _ = encode_varint(node_info.len() as u64, &mut buf);
@@ -838,18 +918,24 @@ impl MeshtasticHandler {
         Some(buf)
     }
 
+
     fn encode_channel_config(&self, index: u8) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
         let mut buf: Vec<u8, MAX_MESSAGE_SIZE> = Vec::new();
+
 
         let _ = write_tag(1, WIRE_VARINT, &mut buf);
         let _ = encode_varint(0, &mut buf);
 
+
         let mut channel: Vec<u8, 64> = Vec::new();
+
 
         let _ = write_tag(1, WIRE_VARINT, &mut channel);
         let _ = encode_varint(index as u64, &mut channel);
 
+
         let mut settings: Vec<u8, 48> = Vec::new();
+
 
         let name = self.primary_channel.name_str();
         if !name.is_empty() {
@@ -858,12 +944,15 @@ impl MeshtasticHandler {
             let _ = settings.extend_from_slice(name.as_bytes());
         }
 
+
         let _ = write_tag(2, WIRE_LEN, &mut channel);
         let _ = encode_varint(settings.len() as u64, &mut channel);
         let _ = channel.extend_from_slice(&settings);
 
+
         let _ = write_tag(3, WIRE_VARINT, &mut channel);
         let _ = encode_varint(1, &mut channel);
+
 
         let _ = write_tag(8, WIRE_LEN, &mut buf);
         let _ = encode_varint(channel.len() as u64, &mut buf);
@@ -872,11 +961,14 @@ impl MeshtasticHandler {
         Some(buf)
     }
 
+
     fn encode_config_complete(&self, config_id: u32) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
         let mut buf: Vec<u8, MAX_MESSAGE_SIZE> = Vec::new();
 
+
         let _ = write_tag(1, WIRE_VARINT, &mut buf);
         let _ = encode_varint(0, &mut buf);
+
 
         let _ = write_tag(9, WIRE_VARINT, &mut buf);
         let _ = encode_varint(config_id as u64, &mut buf);
@@ -884,10 +976,12 @@ impl MeshtasticHandler {
         Some(buf)
     }
 
+
     pub fn handle_admin_message(&mut self, payload: &[u8]) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
         if payload.is_empty() {
             return None;
         }
+
 
         let tag = payload[0];
         let field_num = tag >> 3;
@@ -896,22 +990,27 @@ impl MeshtasticHandler {
 
             1 => self.encode_privacy_myinfo(),
 
+
             7 => self.encode_privacy_nodeinfo(),
+
 
             5 => {
 
                 None
             }
 
+
             6 => {
 
                 None
             }
 
+
             _ => None,
         }
     }
 }
+
 
 fn format_node_id(node_id: u32) -> heapless::String<16> {
     let mut s = heapless::String::new();
@@ -925,12 +1024,14 @@ fn format_node_id(node_id: u32) -> heapless::String<16> {
     s
 }
 
+
 pub enum ToRadioResponse {
 
     LoRaPacket(Vec<u8, 256>),
 
     FromRadio(Vec<u8, MAX_MESSAGE_SIZE>),
 }
+
 
 fn decode_varint(data: &[u8]) -> (u64, usize) {
     let mut result: u64 = 0;
@@ -952,6 +1053,7 @@ fn decode_varint(data: &[u8]) -> (u64, usize) {
     (result, consumed)
 }
 
+
 fn encode_varint<const N: usize>(value: u64, buf: &mut Vec<u8, N>) -> bool {
     let mut v = value;
     loop {
@@ -967,46 +1069,56 @@ fn encode_varint<const N: usize>(value: u64, buf: &mut Vec<u8, N>) -> bool {
     }
 }
 
+
 fn encode_sint32<const N: usize>(value: i32, buf: &mut Vec<u8, N>) -> bool {
     let encoded = ((value << 1) ^ (value >> 31)) as u32;
     encode_varint(encoded as u64, buf)
 }
+
 
 fn write_tag<const N: usize>(field: u32, wire_type: u8, buf: &mut Vec<u8, N>) -> bool {
     let tag = (field << 3) | (wire_type as u32);
     encode_varint(tag as u64, buf)
 }
 
+
 const WIRE_VARINT: u8 = 0;
 const WIRE_32BIT: u8 = 5;
 const WIRE_LEN: u8 = 2;
 
+
 pub fn encode_fromradio_packet(packet: &MeshPacket) -> Option<Vec<u8, MAX_MESSAGE_SIZE>> {
 
     let mut mesh_buf: Vec<u8, 300> = Vec::new();
+
 
     if packet.from != 0 {
         if !write_tag(1, WIRE_32BIT, &mut mesh_buf) { return None; }
         if mesh_buf.extend_from_slice(&packet.from.to_le_bytes()).is_err() { return None; }
     }
 
+
     if packet.to != 0 {
         if !write_tag(2, WIRE_32BIT, &mut mesh_buf) { return None; }
         if mesh_buf.extend_from_slice(&packet.to.to_le_bytes()).is_err() { return None; }
     }
+
 
     if packet.channel != 0 {
         if !write_tag(3, WIRE_VARINT, &mut mesh_buf) { return None; }
         if !encode_varint(packet.channel as u64, &mut mesh_buf) { return None; }
     }
 
+
     match &packet.payload {
         PacketPayload::Decoded(data) => {
 
             let mut data_buf: Vec<u8, MAX_LORA_PAYLOAD> = Vec::new();
 
+
             if !write_tag(1, WIRE_VARINT, &mut data_buf) { return None; }
             if !encode_varint(data.port as u64, &mut data_buf) { return None; }
+
 
             if !data.payload.is_empty() {
                 if !write_tag(2, WIRE_LEN, &mut data_buf) { return None; }
@@ -1014,35 +1126,42 @@ pub fn encode_fromradio_packet(packet: &MeshPacket) -> Option<Vec<u8, MAX_MESSAG
                 if data_buf.extend_from_slice(&data.payload).is_err() { return None; }
             }
 
+
             if data.want_response {
                 if !write_tag(3, WIRE_VARINT, &mut data_buf) { return None; }
                 if data_buf.push(1).is_err() { return None; }
             }
+
 
             if data.dest != 0 {
                 if !write_tag(4, WIRE_32BIT, &mut data_buf) { return None; }
                 if data_buf.extend_from_slice(&data.dest.to_le_bytes()).is_err() { return None; }
             }
 
+
             if data.source != 0 {
                 if !write_tag(5, WIRE_32BIT, &mut data_buf) { return None; }
                 if data_buf.extend_from_slice(&data.source.to_le_bytes()).is_err() { return None; }
             }
+
 
             if data.request_id != 0 {
                 if !write_tag(6, WIRE_32BIT, &mut data_buf) { return None; }
                 if data_buf.extend_from_slice(&data.request_id.to_le_bytes()).is_err() { return None; }
             }
 
+
             if data.reply_id != 0 {
                 if !write_tag(7, WIRE_32BIT, &mut data_buf) { return None; }
                 if data_buf.extend_from_slice(&data.reply_id.to_le_bytes()).is_err() { return None; }
             }
 
+
             if data.emoji != 0 {
                 if !write_tag(8, WIRE_32BIT, &mut data_buf) { return None; }
                 if data_buf.extend_from_slice(&data.emoji.to_le_bytes()).is_err() { return None; }
             }
+
 
             if !data_buf.is_empty() {
                 if !write_tag(4, WIRE_LEN, &mut mesh_buf) { return None; }
@@ -1060,30 +1179,36 @@ pub fn encode_fromradio_packet(packet: &MeshPacket) -> Option<Vec<u8, MAX_MESSAG
         }
     }
 
+
     if packet.id != 0 {
         if !write_tag(6, WIRE_32BIT, &mut mesh_buf) { return None; }
         if mesh_buf.extend_from_slice(&packet.id.to_le_bytes()).is_err() { return None; }
     }
+
 
     if packet.rx_time != 0 {
         if !write_tag(7, WIRE_32BIT, &mut mesh_buf) { return None; }
         if mesh_buf.extend_from_slice(&packet.rx_time.to_le_bytes()).is_err() { return None; }
     }
 
+
     if packet.rx_snr != 0.0 {
         if !write_tag(8, WIRE_32BIT, &mut mesh_buf) { return None; }
         if mesh_buf.extend_from_slice(&packet.rx_snr.to_bits().to_le_bytes()).is_err() { return None; }
     }
+
 
     if packet.hop_limit != 0 {
         if !write_tag(9, WIRE_VARINT, &mut mesh_buf) { return None; }
         if !encode_varint(packet.hop_limit as u64, &mut mesh_buf) { return None; }
     }
 
+
     if packet.want_ack {
         if !write_tag(10, WIRE_VARINT, &mut mesh_buf) { return None; }
         if mesh_buf.push(1).is_err() { return None; }
     }
+
 
     let priority_val = packet.priority as u8;
     if priority_val != 0 {
@@ -1091,12 +1216,15 @@ pub fn encode_fromradio_packet(packet: &MeshPacket) -> Option<Vec<u8, MAX_MESSAG
         if !encode_varint(priority_val as u64, &mut mesh_buf) { return None; }
     }
 
+
     if packet.rx_rssi != 0 {
         if !write_tag(12, WIRE_VARINT, &mut mesh_buf) { return None; }
         if !encode_sint32(packet.rx_rssi, &mut mesh_buf) { return None; }
     }
 
+
     let mut from_radio_buf: Vec<u8, MAX_MESSAGE_SIZE> = Vec::new();
+
 
     if !mesh_buf.is_empty() {
         if !write_tag(2, WIRE_LEN, &mut from_radio_buf) { return None; }
@@ -1113,9 +1241,12 @@ impl Default for MeshtasticHandler {
     }
 }
 
+
 pub const MAX_SERIAL_PAYLOAD: usize = 512;
 
+
 pub const MAX_FRAME_SIZE: usize = 4 + MAX_SERIAL_PAYLOAD;
+
 
 #[derive(Debug, Clone)]
 pub struct MeshtasticFrame {
@@ -1131,6 +1262,7 @@ impl MeshtasticFrame {
         }
     }
 
+
     pub fn with_payload(data: &[u8]) -> Option<Self> {
         if data.len() > MAX_SERIAL_PAYLOAD {
             return None;
@@ -1142,15 +1274,19 @@ impl MeshtasticFrame {
         Some(frame)
     }
 
+
     pub fn encode(&self) -> Vec<u8, MAX_FRAME_SIZE> {
         let mut buf = Vec::new();
+
 
         let _ = buf.push(SERIAL_SYNC[0]);
         let _ = buf.push(SERIAL_SYNC[1]);
 
+
         let len = self.payload.len() as u16;
         let _ = buf.push((len >> 8) as u8);
         let _ = buf.push(len as u8);
+
 
         for &b in &self.payload {
             let _ = buf.push(b);
@@ -1166,6 +1302,7 @@ impl Default for MeshtasticFrame {
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ParserState {
     WaitSync1,
@@ -1174,6 +1311,7 @@ enum ParserState {
     WaitLenLow,
     WaitPayload,
 }
+
 
 pub struct MeshtasticParser {
     state: ParserState,
@@ -1198,12 +1336,14 @@ impl MeshtasticParser {
         }
     }
 
+
     pub fn reset(&mut self) {
         self.state = ParserState::WaitSync1;
         self.payload.clear();
         self.payload_len = 0;
         self.payload_idx = 0;
     }
+
 
     pub fn feed(&mut self, byte: u8) -> Option<MeshtasticFrame> {
         match self.state {
@@ -1259,5 +1399,42 @@ impl MeshtasticParser {
             }
         }
         None
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_handler_creation() {
+        let handler = MeshtasticHandler::new(0x12345678);
+        assert_eq!(handler.node_id, 0x12345678);
+        assert_eq!(handler.rx_count, 0);
+        assert_eq!(handler.tx_count, 0);
+    }
+
+    #[test]
+    fn test_packet_id_generation() {
+        let mut handler = MeshtasticHandler::new(1);
+        assert_eq!(handler.next_packet_id(), 1);
+        assert_eq!(handler.next_packet_id(), 2);
+        assert_eq!(handler.next_packet_id(), 3);
+    }
+
+    #[test]
+    fn test_serial_frame() {
+        let handler = MeshtasticHandler::new(1);
+        let payload = b"test";
+
+        let frame = handler.build_serial_frame(payload).unwrap();
+        assert_eq!(frame[0], 0x94);
+        assert_eq!(frame[1], 0xC3);
+        assert_eq!(frame[2], 0x00);
+        assert_eq!(frame[3], 0x04);
+
+        let parsed = handler.parse_serial_frame(&frame).unwrap();
+        assert_eq!(&parsed[..], payload);
     }
 }

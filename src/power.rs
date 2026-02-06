@@ -1,12 +1,17 @@
 pub const MIN_DEEP_SLEEP_US: u64 = 1_000;
 
+
 pub const MAX_DEEP_SLEEP_US: u64 = 86_400_000_000;
+
 
 pub const DEFAULT_LIGHT_SLEEP_MS: u32 = 100;
 
+
 pub const LOW_BATTERY_THRESHOLD_MV: u32 = 3400;
 
+
 pub const CRITICAL_BATTERY_THRESHOLD_MV: u32 = 3200;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PowerMode {
@@ -25,6 +30,7 @@ impl Default for PowerMode {
         PowerMode::Balanced
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WakeSources(pub u32);
@@ -51,11 +57,14 @@ impl WakeSources {
 
     pub const EXT1: Self = Self(1 << 8);
 
+
     pub const ALL: Self = Self(0x1FF);
+
 
     pub const fn or(self, other: Self) -> Self {
         Self(self.0 | other.0)
     }
+
 
     pub const fn has(self, source: Self) -> bool {
         (self.0 & source.0) != 0
@@ -68,6 +77,7 @@ impl core::ops::BitOr for WakeSources {
         Self(self.0 | rhs.0)
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WakeCause {
@@ -95,6 +105,7 @@ pub enum WakeCause {
     Unknown,
 }
 
+
 #[derive(Debug, Clone, Copy)]
 pub struct GpioWakeConfig {
 
@@ -102,6 +113,7 @@ pub struct GpioWakeConfig {
 
     pub level_high: bool,
 }
+
 
 pub struct PowerManager {
 
@@ -137,19 +149,23 @@ impl PowerManager {
         }
     }
 
+
     pub fn init(&mut self) -> Result<(), PowerError> {
 
         self.last_wake_cause = self.read_wake_cause();
+
 
         self.apply_mode()?;
 
         Ok(())
     }
 
+
     pub fn set_mode(&mut self, mode: PowerMode) -> Result<(), PowerError> {
         self.mode = mode;
         self.apply_mode()
     }
+
 
     fn apply_mode(&mut self) -> Result<(), PowerError> {
         let (cpu_freq, wifi_ps, bt_power) = match self.mode {
@@ -161,14 +177,17 @@ impl PowerManager {
 
         self.set_cpu_frequency(cpu_freq)?;
 
+
         if wifi_ps {
             self.enable_wifi_power_save();
         } else {
             self.disable_wifi_power_save();
         }
 
+
         Ok(())
     }
+
 
     pub fn set_cpu_frequency(&mut self, mhz: u32) -> Result<(), PowerError> {
 
@@ -176,6 +195,7 @@ impl PowerManager {
             240 | 160 | 80 | 40 | 20 | 10 => {},
             _ => return Err(PowerError::InvalidFrequency),
         };
+
 
         unsafe {
             let pm_config = esp_idf_sys::esp_pm_config_esp32s3_t {
@@ -194,6 +214,7 @@ impl PowerManager {
         Ok(())
     }
 
+
     pub fn configure_gpio_wake(&mut self, config: GpioWakeConfig) -> Result<(), PowerError> {
 
         for slot in &mut self.gpio_wake_pins {
@@ -204,6 +225,7 @@ impl PowerManager {
         }
         Err(PowerError::TooManyWakePins)
     }
+
 
     pub fn light_sleep(&mut self, duration_ms: u32) -> Result<WakeCause, PowerError> {
         if duration_ms == 0 {
@@ -227,6 +249,7 @@ impl PowerManager {
                 self.configure_gpio_wake_internal()?;
             }
 
+
             let ret = esp_idf_sys::esp_light_sleep_start();
             if ret != 0 {
                 return Err(PowerError::SleepFailed);
@@ -236,10 +259,12 @@ impl PowerManager {
         self.sleep_count += 1;
         self.total_sleep_us += duration_us;
 
+
         let cause = self.read_wake_cause();
         self.last_wake_cause = cause;
         Ok(cause)
     }
+
 
     pub fn deep_sleep(&mut self, duration_us: u64) -> ! {
         if duration_us < MIN_DEEP_SLEEP_US {
@@ -257,18 +282,22 @@ impl PowerManager {
             }
         }
 
+
         if self.deep_sleep_wake.has(WakeSources::GPIO) {
             let _ = self.configure_gpio_wake_internal();
         }
+
 
         unsafe {
             esp_idf_sys::esp_deep_sleep_start();
         }
 
+
         loop {
             core::hint::spin_loop();
         }
     }
+
 
     fn configure_gpio_wake_internal(&self) -> Result<(), PowerError> {
         unsafe {
@@ -292,6 +321,7 @@ impl PowerManager {
         }
         Ok(())
     }
+
 
     fn read_wake_cause(&self) -> WakeCause {
         unsafe {
@@ -319,11 +349,13 @@ impl PowerManager {
         }
     }
 
+
     fn enable_wifi_power_save(&self) {
         unsafe {
             esp_idf_sys::esp_wifi_set_ps(esp_idf_sys::wifi_ps_type_t_WIFI_PS_MIN_MODEM);
         }
     }
+
 
     fn disable_wifi_power_save(&self) {
         unsafe {
@@ -331,33 +363,41 @@ impl PowerManager {
         }
     }
 
+
     pub fn mode(&self) -> PowerMode {
         self.mode
     }
+
 
     pub fn last_wake_cause(&self) -> WakeCause {
         self.last_wake_cause
     }
 
+
     pub fn total_sleep_us(&self) -> u64 {
         self.total_sleep_us
     }
+
 
     pub fn sleep_count(&self) -> u32 {
         self.sleep_count
     }
 
+
     pub fn cpu_freq_mhz(&self) -> u32 {
         self.cpu_freq_mhz
     }
+
 
     pub fn is_battery_low(voltage_mv: u32) -> bool {
         voltage_mv < LOW_BATTERY_THRESHOLD_MV
     }
 
+
     pub fn is_battery_critical(voltage_mv: u32) -> bool {
         voltage_mv < CRITICAL_BATTERY_THRESHOLD_MV
     }
+
 
     pub fn set_rtc_data(&self, slot: u8, value: u32) {
         if slot >= 8 {
@@ -369,6 +409,7 @@ impl PowerManager {
             core::ptr::write_volatile(rtc_mem, value);
         }
     }
+
 
     pub fn get_rtc_data(&self, slot: u8) -> u32 {
         if slot >= 8 {
@@ -387,6 +428,7 @@ impl Default for PowerManager {
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PowerError {
 
@@ -399,4 +441,25 @@ pub enum PowerError {
     SleepFailed,
 
     TooManyWakePins,
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wake_sources() {
+        let sources = WakeSources::TIMER | WakeSources::GPIO;
+        assert!(sources.has(WakeSources::TIMER));
+        assert!(sources.has(WakeSources::GPIO));
+        assert!(!sources.has(WakeSources::UART));
+    }
+
+    #[test]
+    fn test_battery_thresholds() {
+        assert!(!PowerManager::is_battery_low(3600));
+        assert!(PowerManager::is_battery_low(3300));
+        assert!(PowerManager::is_battery_critical(3100));
+    }
 }

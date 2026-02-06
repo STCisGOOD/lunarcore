@@ -9,14 +9,18 @@ const K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
+
 const H_INIT: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
+
 pub const DIGEST_SIZE: usize = 32;
 
+
 pub const BLOCK_SIZE: usize = 64;
+
 
 pub struct Sha256 {
 
@@ -40,8 +44,10 @@ impl Sha256 {
         }
     }
 
+
     pub fn update(&mut self, data: &[u8]) {
         let mut offset = 0;
+
 
         if self.buffer_len > 0 {
             let needed = BLOCK_SIZE - self.buffer_len;
@@ -58,12 +64,14 @@ impl Sha256 {
             }
         }
 
+
         while offset + BLOCK_SIZE <= data.len() {
             let mut block = [0u8; BLOCK_SIZE];
             block.copy_from_slice(&data[offset..offset + BLOCK_SIZE]);
             self.process_block(&block);
             offset += BLOCK_SIZE;
         }
+
 
         if offset < data.len() {
             let remaining = data.len() - offset;
@@ -74,12 +82,15 @@ impl Sha256 {
         self.total_len += data.len() as u64;
     }
 
+
     pub fn finalize(mut self) -> [u8; DIGEST_SIZE] {
 
         let total_bits = self.total_len * 8;
 
+
         self.buffer[self.buffer_len] = 0x80;
         self.buffer_len += 1;
+
 
         if self.buffer_len > 56 {
 
@@ -90,12 +101,15 @@ impl Sha256 {
             self.buffer_len = 0;
         }
 
+
         for i in self.buffer_len..56 {
             self.buffer[i] = 0;
         }
 
+
         self.buffer[56..64].copy_from_slice(&total_bits.to_be_bytes());
         self.process_block(&self.buffer.clone());
+
 
         let mut digest = [0u8; DIGEST_SIZE];
         for (i, word) in self.state.iter().enumerate() {
@@ -105,9 +119,11 @@ impl Sha256 {
         digest
     }
 
+
     fn process_block(&mut self, block: &[u8; BLOCK_SIZE]) {
 
         let mut w = [0u32; 64];
+
 
         for i in 0..16 {
             w[i] = u32::from_be_bytes([
@@ -118,6 +134,7 @@ impl Sha256 {
             ]);
         }
 
+
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
             let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
@@ -127,6 +144,7 @@ impl Sha256 {
                 .wrapping_add(s1);
         }
 
+
         let mut a = self.state[0];
         let mut b = self.state[1];
         let mut c = self.state[2];
@@ -135,6 +153,7 @@ impl Sha256 {
         let mut f = self.state[5];
         let mut g = self.state[6];
         let mut h = self.state[7];
+
 
         for i in 0..64 {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
@@ -158,6 +177,7 @@ impl Sha256 {
             a = temp1.wrapping_add(temp2);
         }
 
+
         self.state[0] = self.state[0].wrapping_add(a);
         self.state[1] = self.state[1].wrapping_add(b);
         self.state[2] = self.state[2].wrapping_add(c);
@@ -168,11 +188,13 @@ impl Sha256 {
         self.state[7] = self.state[7].wrapping_add(h);
     }
 
+
     pub fn hash(data: &[u8]) -> [u8; DIGEST_SIZE] {
         let mut hasher = Self::new();
         hasher.update(data);
         hasher.finalize()
     }
+
 
     pub fn hash256(data: &[u8]) -> [u8; DIGEST_SIZE] {
         let first = Self::hash(data);
@@ -194,5 +216,78 @@ impl Clone for Sha256 {
             buffer: self.buffer,
             buffer_len: self.buffer_len,
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty() {
+        let hash = Sha256::hash(b"");
+        let expected: [u8; 32] = [
+            0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+            0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+            0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+            0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+        ];
+        assert_eq!(hash, expected);
+    }
+
+    #[test]
+    fn test_abc() {
+        let hash = Sha256::hash(b"abc");
+        let expected: [u8; 32] = [
+            0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
+            0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+            0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c,
+            0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+        ];
+        assert_eq!(hash, expected);
+    }
+
+    #[test]
+    fn test_long() {
+
+        let input = b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+        let hash = Sha256::hash(input);
+        let expected: [u8; 32] = [
+            0x24, 0x8d, 0x6a, 0x61, 0xd2, 0x06, 0x38, 0xb8,
+            0xe5, 0xc0, 0x26, 0x93, 0x0c, 0x3e, 0x60, 0x39,
+            0xa3, 0x3c, 0xe4, 0x59, 0x64, 0xff, 0x21, 0x67,
+            0xf6, 0xec, 0xed, 0xd4, 0x19, 0xdb, 0x06, 0xc1,
+        ];
+        assert_eq!(hash, expected);
+    }
+
+    #[test]
+    fn test_incremental() {
+        let mut hasher = Sha256::new();
+        hasher.update(b"abc");
+        hasher.update(b"def");
+        let hash1 = hasher.finalize();
+
+        let hash2 = Sha256::hash(b"abcdef");
+
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_one_million_a() {
+
+        let mut hasher = Sha256::new();
+        for _ in 0..10000 {
+            hasher.update(&[b'a'; 100]);
+        }
+        let hash = hasher.finalize();
+        let expected: [u8; 32] = [
+            0xcd, 0xc7, 0x6e, 0x5c, 0x99, 0x14, 0xfb, 0x92,
+            0x81, 0xa1, 0xc7, 0xe2, 0x84, 0xd7, 0x3e, 0x67,
+            0xf1, 0x80, 0x9a, 0x48, 0xa4, 0x97, 0x20, 0x0e,
+            0x04, 0x6d, 0x39, 0xcc, 0xc7, 0x11, 0x2c, 0xd0,
+        ];
+        assert_eq!(hash, expected);
     }
 }

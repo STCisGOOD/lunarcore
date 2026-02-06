@@ -3,39 +3,57 @@ use crate::crypto::chacha20::ChaCha20;
 use crate::crypto::sha256::Sha256;
 use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
+
 pub const DEFAULT_TCP_PORT: u16 = 4000;
+
 
 pub const MAX_TCP_CLIENTS: usize = 4;
 
+
 pub const TCP_RX_BUFFER_SIZE: usize = 512;
+
 
 pub const TCP_TX_BUFFER_SIZE: usize = 512;
 
+
 pub const WIFI_CONNECT_TIMEOUT_SEC: u32 = 30;
+
 
 pub const DEFAULT_AP_SSID: &str = "LunarCore";
 
+
 pub const DEFAULT_AP_PASSWORD: &str = "lunarpunk";
+
 
 pub const MAX_SSID_LEN: usize = 32;
 
+
 pub const MAX_PASSWORD_LEN: usize = 64;
+
 
 pub const AUTH_CHALLENGE_SIZE: usize = 32;
 
+
 pub const AUTH_RESPONSE_SIZE: usize = 32;
+
 
 pub const SESSION_KEY_SIZE: usize = 32;
 
+
 pub const SESSION_NONCE_SIZE: usize = 12;
+
 
 pub const AUTH_TIMEOUT_SEC: u32 = 10;
 
+
 pub const MAX_AUTH_FAILURES: u8 = 3;
+
 
 pub const AUTH_LOCKOUT_SEC: u32 = 300;
 
+
 pub const CONN_RATE_LIMIT: u8 = 10;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WifiMode {
@@ -55,10 +73,12 @@ impl Default for WifiMode {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct SecurityConfig {
 
     pub require_auth: bool,
+
 
     pub psk: [u8; 32],
 
@@ -100,6 +120,7 @@ impl SecurityConfig {
         }
     }
 
+
     pub fn insecure() -> Self {
         Self {
             require_auth: false,
@@ -110,10 +131,12 @@ impl SecurityConfig {
         }
     }
 
+
     pub fn is_psk_set(&self) -> bool {
         self.psk.iter().any(|&b| b != 0)
     }
 }
+
 
 #[derive(Debug, Clone)]
 pub struct WifiConfig {
@@ -165,6 +188,7 @@ impl Default for WifiConfig {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct NetworkStatus {
 
@@ -200,14 +224,18 @@ impl Default for NetworkStatus {
     }
 }
 
+
 fn hmac_sha256(key: &[u8; 32], message: &[u8]) -> [u8; 32] {
+
 
     const IPAD: u8 = 0x36;
     const OPAD: u8 = 0x5c;
     const BLOCK_SIZE: usize = 64;
 
+
     let mut k_pad = [0u8; BLOCK_SIZE];
     k_pad[..32].copy_from_slice(key);
+
 
     let mut inner_hasher = Sha256::new();
     let mut inner_key = [0u8; BLOCK_SIZE];
@@ -217,6 +245,7 @@ fn hmac_sha256(key: &[u8; 32], message: &[u8]) -> [u8; 32] {
     inner_hasher.update(&inner_key);
     inner_hasher.update(message);
     let inner_hash = inner_hasher.finalize();
+
 
     let mut outer_hasher = Sha256::new();
     let mut outer_key = [0u8; BLOCK_SIZE];
@@ -228,6 +257,7 @@ fn hmac_sha256(key: &[u8; 32], message: &[u8]) -> [u8; 32] {
     outer_hasher.finalize()
 }
 
+
 #[inline(never)]
 fn ct_eq_32(a: &[u8; 32], b: &[u8; 32]) -> bool {
     let mut diff: u8 = 0;
@@ -236,6 +266,7 @@ fn ct_eq_32(a: &[u8; 32], b: &[u8; 32]) -> bool {
     }
     diff == 0
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthState {
@@ -249,6 +280,7 @@ pub enum AuthState {
     Failed,
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TcpClientState {
 
@@ -260,6 +292,7 @@ pub enum TcpClientState {
 
     Connected,
 }
+
 
 pub struct SessionCrypto {
 
@@ -290,6 +323,7 @@ impl SessionCrypto {
         }
     }
 
+
     pub fn init(&mut self, key: &[u8; SESSION_KEY_SIZE], nonce: &[u8; SESSION_NONCE_SIZE]) {
         self.key.copy_from_slice(key);
         self.nonce.copy_from_slice(nonce);
@@ -297,10 +331,12 @@ impl SessionCrypto {
         self.enabled = true;
     }
 
+
     pub fn encrypt(&mut self, data: &mut [u8]) {
         if !self.enabled {
             return;
         }
+
 
         let counter_bytes = self.counter.to_le_bytes();
         self.nonce[0..4].copy_from_slice(&counter_bytes);
@@ -311,10 +347,12 @@ impl SessionCrypto {
         self.counter = self.counter.wrapping_add(1);
     }
 
+
     pub fn decrypt(&mut self, data: &mut [u8]) {
 
         self.encrypt(data);
     }
+
 
     pub fn clear(&mut self) {
 
@@ -328,6 +366,7 @@ impl SessionCrypto {
         self.enabled = false;
     }
 }
+
 
 pub struct TcpClient {
 
@@ -375,13 +414,16 @@ impl TcpClient {
         }
     }
 
+
     pub fn is_available(&self) -> bool {
         self.state == TcpClientState::Disconnected
     }
 
+
     pub fn is_authenticated(&self) -> bool {
         self.auth_state == AuthState::Authenticated || self.auth_state == AuthState::None
     }
+
 
     pub fn reset(&mut self) {
         self.fd = -1;
@@ -397,6 +439,7 @@ impl TcpClient {
     }
 }
 
+
 pub struct WifiManager {
 
     pub config: WifiConfig,
@@ -409,6 +452,7 @@ pub struct WifiManager {
 
     initialized: bool,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WifiError {
@@ -481,13 +525,16 @@ impl WifiManager {
         }
     }
 
+
     pub fn set_psk(&mut self, psk: &[u8; 32]) {
         self.config.security.psk.copy_from_slice(psk);
     }
 
+
     pub fn is_auth_configured(&self) -> bool {
         !self.config.security.require_auth || self.config.security.is_psk_set()
     }
+
 
     pub fn init(&mut self, config: WifiConfig) -> Result<(), WifiError> {
         if self.initialized {
@@ -495,6 +542,7 @@ impl WifiManager {
         }
 
         self.config = config;
+
 
         unsafe {
 
@@ -505,9 +553,12 @@ impl WifiManager {
                 esp_idf_sys::nvs_flash_init();
             }
 
+
             esp_idf_sys::esp_netif_init();
 
+
             esp_idf_sys::esp_event_loop_create_default();
+
 
             match self.config.mode {
                 WifiMode::Off => {}
@@ -523,8 +574,10 @@ impl WifiManager {
                 }
             }
 
+
             let mut wifi_init_config = esp_idf_sys::wifi_init_config_t::default();
             esp_idf_sys::esp_wifi_init(&wifi_init_config);
+
 
             esp_idf_sys::esp_wifi_set_storage(esp_idf_sys::wifi_storage_t_WIFI_STORAGE_RAM);
         }
@@ -532,6 +585,7 @@ impl WifiManager {
         self.initialized = true;
         Ok(())
     }
+
 
     pub fn start(&mut self) -> Result<(), WifiError> {
         if !self.initialized {
@@ -572,14 +626,17 @@ impl WifiManager {
         Ok(())
     }
 
+
     fn configure_ap(&self) -> Result<(), WifiError> {
         unsafe {
             let mut ap_config: esp_idf_sys::wifi_config_t = core::mem::zeroed();
+
 
             let ssid_bytes = self.config.ap_ssid.as_bytes();
             let ssid_len = ssid_bytes.len().min(32);
             ap_config.ap.ssid[..ssid_len].copy_from_slice(&ssid_bytes[..ssid_len]);
             ap_config.ap.ssid_len = ssid_len as u8;
+
 
             let pass_bytes = self.config.ap_password.as_bytes();
             let pass_len = pass_bytes.len().min(64);
@@ -606,13 +663,16 @@ impl WifiManager {
         Ok(())
     }
 
+
     fn configure_sta(&self) -> Result<(), WifiError> {
         unsafe {
             let mut sta_config: esp_idf_sys::wifi_config_t = core::mem::zeroed();
 
+
             let ssid_bytes = self.config.sta_ssid.as_bytes();
             let ssid_len = ssid_bytes.len().min(32);
             sta_config.sta.ssid[..ssid_len].copy_from_slice(&ssid_bytes[..ssid_len]);
+
 
             let pass_bytes = self.config.sta_password.as_bytes();
             let pass_len = pass_bytes.len().min(64);
@@ -629,6 +689,7 @@ impl WifiManager {
         }
         Ok(())
     }
+
 
     pub fn start_tcp_server(&mut self) -> Result<(), WifiError> {
         if !self.initialized {
@@ -647,6 +708,7 @@ impl WifiManager {
                 return Err(WifiError::SocketError);
             }
 
+
             let opt: i32 = 1;
             esp_idf_sys::lwip_setsockopt(
                 fd,
@@ -655,6 +717,7 @@ impl WifiManager {
                 &opt as *const _ as *const core::ffi::c_void,
                 core::mem::size_of::<i32>() as u32,
             );
+
 
             let mut addr: esp_idf_sys::sockaddr_in = core::mem::zeroed();
             addr.sin_family = esp_idf_sys::AF_INET as u8;
@@ -672,11 +735,13 @@ impl WifiManager {
                 return Err(WifiError::SocketError);
             }
 
+
             let ret = esp_idf_sys::lwip_listen(fd, MAX_TCP_CLIENTS as i32);
             if ret < 0 {
                 esp_idf_sys::lwip_close(fd);
                 return Err(WifiError::SocketError);
             }
+
 
             let flags = esp_idf_sys::lwip_fcntl(fd, esp_idf_sys::F_GETFL as i32, 0);
             esp_idf_sys::lwip_fcntl(fd, esp_idf_sys::F_SETFL as i32, flags | esp_idf_sys::O_NONBLOCK as i32);
@@ -687,6 +752,7 @@ impl WifiManager {
         Ok(())
     }
 
+
     pub fn stop_tcp_server(&mut self) {
         if self.server_fd >= 0 {
             unsafe {
@@ -694,6 +760,7 @@ impl WifiManager {
             }
             self.server_fd = -1;
         }
+
 
         for client in &mut self.clients {
             if client.fd >= 0 {
@@ -705,12 +772,15 @@ impl WifiManager {
         }
     }
 
+
     pub fn poll(&mut self) -> Option<(usize, Vec<u8, TCP_RX_BUFFER_SIZE>)> {
         if self.server_fd < 0 {
             return None;
         }
 
+
         self.accept_connections();
+
 
         for i in 0..MAX_TCP_CLIENTS {
             if self.clients[i].fd >= 0 {
@@ -722,6 +792,7 @@ impl WifiManager {
 
         None
     }
+
 
     fn accept_connections(&mut self) {
         unsafe {
@@ -745,6 +816,7 @@ impl WifiManager {
                         client.fd = client_fd;
                         client.state = TcpClientState::Detecting;
 
+
                         let ip_bytes = client_addr.sin_addr.s_addr.to_le_bytes();
                         let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
                         let port = u16::from_be(client_addr.sin_port);
@@ -755,10 +827,12 @@ impl WifiManager {
                     }
                 }
 
+
                 esp_idf_sys::lwip_close(client_fd);
             }
         }
     }
+
 
     fn read_client(&mut self, idx: usize) -> Option<Vec<u8, TCP_RX_BUFFER_SIZE>> {
         let client = &mut self.clients[idx];
@@ -792,6 +866,7 @@ impl WifiManager {
         None
     }
 
+
     pub fn send_to_client(&mut self, idx: usize, data: &[u8]) -> Result<usize, WifiError> {
         if idx >= MAX_TCP_CLIENTS {
             return Err(WifiError::SocketError);
@@ -819,6 +894,7 @@ impl WifiManager {
         }
     }
 
+
     pub fn broadcast(&mut self, data: &[u8]) {
         for i in 0..MAX_TCP_CLIENTS {
             if self.clients[i].fd >= 0 {
@@ -826,6 +902,7 @@ impl WifiManager {
             }
         }
     }
+
 
     pub fn disconnect_client(&mut self, idx: usize) {
         if idx >= MAX_TCP_CLIENTS {
@@ -844,6 +921,7 @@ impl WifiManager {
         }
     }
 
+
     pub fn get_client(&self, idx: usize) -> Option<&TcpClient> {
         if idx < MAX_TCP_CLIENTS && self.clients[idx].fd >= 0 {
             Some(&self.clients[idx])
@@ -852,6 +930,7 @@ impl WifiManager {
         }
     }
 
+
     pub fn get_client_mut(&mut self, idx: usize) -> Option<&mut TcpClient> {
         if idx < MAX_TCP_CLIENTS && self.clients[idx].fd >= 0 {
             Some(&mut self.clients[idx])
@@ -859,6 +938,7 @@ impl WifiManager {
             None
         }
     }
+
 
     pub fn stop(&mut self) {
         self.stop_tcp_server();
@@ -872,9 +952,11 @@ impl WifiManager {
         self.status.ap_active = false;
     }
 
+
     pub fn status(&self) -> &NetworkStatus {
         &self.status
     }
+
 
     pub fn update_status(&mut self) {
         unsafe {
@@ -887,8 +969,10 @@ impl WifiManager {
                 self.status.sta_connected = false;
             }
 
+
         }
     }
+
 
     pub fn scan(&mut self) -> Result<Vec<NetworkInfo, 16>, WifiError> {
         if !self.initialized {
@@ -904,6 +988,7 @@ impl WifiManager {
             if ret != 0 {
                 return Err(WifiError::ConfigError);
             }
+
 
             let mut ap_count: u16 = 0;
             esp_idf_sys::esp_wifi_scan_get_ap_num(&mut ap_count);
@@ -944,6 +1029,7 @@ impl Default for WifiManager {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct NetworkInfo {
 
@@ -960,5 +1046,158 @@ impl NetworkInfo {
 
     pub fn is_open(&self) -> bool {
         self.auth == 0
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wifi_config_default() {
+        let config = WifiConfig::default();
+        assert_eq!(config.mode, WifiMode::Off);
+        assert_eq!(config.tcp_port, DEFAULT_TCP_PORT);
+        assert_eq!(&config.ap_ssid[..], DEFAULT_AP_SSID);
+
+        assert!(config.security.require_auth);
+        assert!(config.security.encrypt_traffic);
+    }
+
+    #[test]
+    fn test_tcp_client_empty() {
+        let client = TcpClient::empty();
+        assert!(client.is_available());
+        assert_eq!(client.fd, -1);
+        assert_eq!(client.auth_state, AuthState::None);
+    }
+
+    #[test]
+    fn test_security_config_default() {
+        let sec = SecurityConfig::default();
+        assert!(sec.require_auth);
+        assert!(sec.encrypt_traffic);
+        assert!(sec.rate_limiting);
+        assert!(!sec.allow_external);
+
+        assert!(!sec.is_psk_set());
+    }
+
+    #[test]
+    fn test_security_config_with_psk() {
+        let psk = [0x42u8; 32];
+        let sec = SecurityConfig::with_psk(&psk);
+        assert!(sec.is_psk_set());
+        assert_eq!(sec.psk, psk);
+    }
+
+    #[test]
+    fn test_security_config_insecure() {
+        let sec = SecurityConfig::insecure();
+        assert!(!sec.require_auth);
+        assert!(!sec.encrypt_traffic);
+        assert!(!sec.rate_limiting);
+        assert!(sec.allow_external);
+    }
+
+    #[test]
+    fn test_hmac_sha256() {
+
+        let key = [0x0bu8; 32];
+        let msg = b"Hi There";
+        let mac = hmac_sha256(&key, msg);
+
+        let mac2 = hmac_sha256(&key, msg);
+        assert_eq!(mac, mac2);
+
+        let mac3 = hmac_sha256(&key, b"Hi There!");
+        assert_ne!(mac, mac3);
+    }
+
+    #[test]
+    fn test_ct_eq_32() {
+        let a = [0x42u8; 32];
+        let b = [0x42u8; 32];
+        let c = [0x43u8; 32];
+        assert!(ct_eq_32(&a, &b));
+        assert!(!ct_eq_32(&a, &c));
+
+        let mut d = a;
+        d[31] ^= 1;
+        assert!(!ct_eq_32(&a, &d));
+    }
+
+    #[test]
+    fn test_session_crypto() {
+        let mut session = SessionCrypto::new();
+        assert!(!session.enabled);
+
+        let key = [0x42u8; 32];
+        let nonce = [0x24u8; 12];
+        session.init(&key, &nonce);
+        assert!(session.enabled);
+        assert_eq!(session.counter, 0);
+
+
+        let original = b"Hello, secure world!";
+        let mut data = [0u8; 32];
+        data[..original.len()].copy_from_slice(original);
+
+
+        let counter_before = session.counter;
+        session.encrypt(&mut data[..original.len()]);
+
+
+        assert_eq!(session.counter, counter_before + 1);
+
+
+        session.init(&key, &nonce);
+        session.decrypt(&mut data[..original.len()]);
+
+        assert_eq!(&data[..original.len()], original);
+
+
+        session.clear();
+        assert!(!session.enabled);
+        assert_eq!(session.key, [0u8; 32]);
+    }
+
+    #[test]
+    fn test_client_authentication_state() {
+        let mut client = TcpClient::empty();
+
+
+        assert!(client.is_authenticated());
+
+
+        client.auth_state = AuthState::ChallengeSent;
+        assert!(!client.is_authenticated());
+
+
+        client.auth_state = AuthState::Authenticated;
+        assert!(client.is_authenticated());
+
+
+        client.auth_state = AuthState::Failed;
+        assert!(!client.is_authenticated());
+    }
+
+    #[test]
+    fn test_wifi_manager_auth_configured() {
+        let mut manager = WifiManager::new();
+
+
+        assert!(!manager.is_auth_configured());
+
+
+        let psk = [0x42u8; 32];
+        manager.set_psk(&psk);
+        assert!(manager.is_auth_configured());
+
+
+        manager.config.security.require_auth = false;
+        manager.config.security.psk = [0u8; 32];
+        assert!(manager.is_auth_configured());
     }
 }

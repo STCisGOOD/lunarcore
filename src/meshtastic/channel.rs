@@ -3,13 +3,18 @@ use crate::crypto::aes::{Aes128, Aes256};
 use crate::crypto::sha256::Sha256;
 use crate::crypto::hkdf::meshtastic as mesh_kdf;
 
+
 pub const MAX_CHANNEL_NAME: usize = 12;
+
 
 pub const KEY_SIZE_128: usize = 16;
 
+
 pub const KEY_SIZE_256: usize = 32;
 
+
 pub const NONCE_SIZE: usize = 16;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -39,6 +44,7 @@ impl Default for ModemPreset {
         ModemPreset::LongFast
     }
 }
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct LoraParams {
@@ -102,14 +108,17 @@ impl ModemPreset {
         }
     }
 
+
     pub fn airtime_ms(&self, payload_bytes: usize) -> u32 {
         let params = self.lora_params();
         let sf = params.spreading_factor as f32;
         let bw = params.bandwidth as f32;
         let cr = params.coding_rate as f32;
 
+
         let t_sym = (2.0_f32.powf(sf)) / bw * 1000.0;
         let t_preamble = (8.0 + 4.25) * t_sym;
+
 
         let pl = payload_bytes as f32;
         let de = if sf >= 11.0 { 1.0 } else { 0.0 };
@@ -125,6 +134,7 @@ impl ModemPreset {
         (t_preamble + t_payload) as u32
     }
 }
+
 
 #[derive(Clone)]
 pub enum ChannelKey {
@@ -170,9 +180,11 @@ impl ChannelKey {
         }
     }
 
+
     pub fn default_key() -> Self {
         ChannelKey::Aes128(mesh_kdf::DEFAULT_KEY)
     }
+
 
     pub fn from_channel_name(name: &str) -> Self {
         if name.is_empty() {
@@ -182,9 +194,11 @@ impl ChannelKey {
         ChannelKey::Aes256(hash)
     }
 
+
     pub fn is_encrypted(&self) -> bool {
         !matches!(self, ChannelKey::None)
     }
+
 
     pub fn as_bytes(&self) -> &[u8] {
         match self {
@@ -210,6 +224,7 @@ impl core::fmt::Debug for ChannelKey {
         }
     }
 }
+
 
 #[derive(Clone)]
 pub struct Channel {
@@ -243,23 +258,28 @@ impl Channel {
         }
     }
 
+
     pub fn primary() -> Self {
         let mut ch = Self::new(0);
         ch.name.extend_from_slice(b"Primary").ok();
         ch
     }
 
+
     pub fn set_name(&mut self, name: &str) {
         self.name.clear();
         let len = core::cmp::min(name.len(), MAX_CHANNEL_NAME);
         self.name.extend_from_slice(&name.as_bytes()[..len]).ok();
 
+
         self.key = ChannelKey::from_channel_name(name);
     }
+
 
     pub fn set_key(&mut self, key: &[u8]) {
         self.key = ChannelKey::from_bytes(key);
     }
+
 
     pub fn encrypt(&self, packet_id: u32, sender: u32, plaintext: &[u8]) -> Option<Vec<u8, 256>> {
         if !self.key.is_encrypted() {
@@ -267,7 +287,9 @@ impl Channel {
             return Vec::from_slice(plaintext).ok();
         }
 
+
         let nonce = mesh_kdf::derive_nonce(packet_id, sender);
+
 
         let mut ciphertext = Vec::new();
         ciphertext.extend_from_slice(plaintext).ok()?;
@@ -292,12 +314,15 @@ impl Channel {
         Some(ciphertext)
     }
 
+
     pub fn decrypt(&self, packet_id: u32, sender: u32, ciphertext: &[u8]) -> Option<Vec<u8, 256>> {
         if !self.key.is_encrypted() {
             return Vec::from_slice(ciphertext).ok();
         }
 
+
         let nonce = mesh_kdf::derive_nonce(packet_id, sender);
+
 
         let mut plaintext = Vec::new();
         plaintext.extend_from_slice(ciphertext).ok()?;
@@ -321,6 +346,7 @@ impl Channel {
         Some(plaintext)
     }
 
+
     pub fn hash(&self) -> u8 {
 
         let key_bytes = self.key.as_bytes();
@@ -334,6 +360,7 @@ impl Channel {
         }
         h
     }
+
 
     pub fn name_str(&self) -> &str {
         core::str::from_utf8(&self.name).unwrap_or("")
@@ -357,7 +384,9 @@ impl core::fmt::Debug for Channel {
     }
 }
 
+
 pub const MAX_CHANNELS: usize = 8;
+
 
 pub struct ChannelSet {
 
@@ -372,13 +401,16 @@ impl ChannelSet {
         Self { channels }
     }
 
+
     pub fn get(&self, index: u8) -> Option<&Channel> {
         self.channels.get(index as usize)?.as_ref()
     }
 
+
     pub fn get_mut(&mut self, index: u8) -> Option<&mut Channel> {
         self.channels.get_mut(index as usize)?.as_mut()
     }
+
 
     pub fn set(&mut self, index: u8, channel: Channel) {
         if (index as usize) < MAX_CHANNELS {
@@ -386,15 +418,18 @@ impl ChannelSet {
         }
     }
 
+
     #[inline]
     pub fn primary(&self) -> Option<&Channel> {
         self.channels[0].as_ref()
     }
 
+
     #[inline]
     pub fn primary_mut(&mut self) -> Option<&mut Channel> {
         self.channels[0].as_mut()
     }
+
 
     pub fn primary_or_init(&mut self) -> &mut Channel {
         if self.channels[0].is_none() {
@@ -404,12 +439,14 @@ impl ChannelSet {
         self.channels[0].as_mut().unwrap()
     }
 
+
     pub fn iter(&self) -> impl Iterator<Item = (u8, &Channel)> {
         self.channels
             .iter()
             .enumerate()
             .filter_map(|(i, ch)| ch.as_ref().map(|c| (i as u8, c)))
     }
+
 
     pub fn find_by_hash(&self, hash: u8) -> Option<&Channel> {
         for ch in self.channels.iter().flatten() {
@@ -419,6 +456,7 @@ impl ChannelSet {
         }
         None
     }
+
 
     pub fn count(&self) -> usize {
         self.channels.iter().filter(|c| c.is_some()).count()
@@ -431,7 +469,9 @@ impl Default for ChannelSet {
     }
 }
 
+
 const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
 
 const BASE64_DECODE: [i8; 128] = {
     let mut table = [-1i8; 128];
@@ -446,6 +486,7 @@ const BASE64_DECODE: [i8; 128] = {
     table[b'/' as usize] = 63;
     table
 };
+
 
 pub fn base64_encode(data: &[u8], output: &mut [u8]) -> usize {
     let mut o = 0;
@@ -483,9 +524,11 @@ pub fn base64_encode(data: &[u8], output: &mut [u8]) -> usize {
     o
 }
 
+
 pub fn base64_decode(data: &[u8], output: &mut [u8]) -> usize {
     let mut o = 0;
     let mut i = 0;
+
 
     let data = if data.starts_with(b"https://meshtastic.org/e/#") {
         &data[26..]
@@ -528,6 +571,7 @@ pub fn base64_decode(data: &[u8], output: &mut [u8]) -> usize {
         i += 4;
     }
 
+
     if i + 1 < data.len() && o < output.len() {
         let b0 = BASE64_DECODE.get(data[i] as usize).copied().unwrap_or(-1);
         let b1 = BASE64_DECODE.get(data[i + 1] as usize).copied().unwrap_or(-1);
@@ -550,4 +594,113 @@ pub fn base64_decode(data: &[u8], output: &mut [u8]) -> usize {
     }
 
     o
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_channel_creation() {
+        let ch = Channel::new(0);
+        assert_eq!(ch.index, 0);
+        assert!(ch.key.is_encrypted());
+    }
+
+    #[test]
+    fn test_channel_name_key_derivation() {
+        let mut ch = Channel::new(0);
+        ch.set_name("MyChannel");
+
+
+        match &ch.key {
+            ChannelKey::Aes256(k) => {
+
+                let expected = Sha256::hash(b"MyChannel");
+                assert_eq!(k, &expected);
+            }
+            _ => panic!("Expected AES-256 key"),
+        }
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_roundtrip() {
+        let ch = Channel::primary();
+        let plaintext = b"Hello, Meshtastic!";
+        let packet_id = 0x12345678;
+        let sender = 0xDEADBEEF;
+
+        let ciphertext = ch.encrypt(packet_id, sender, plaintext).unwrap();
+        assert_ne!(&ciphertext[..], plaintext);
+
+        let decrypted = ch.decrypt(packet_id, sender, &ciphertext).unwrap();
+        assert_eq!(&decrypted[..], plaintext);
+    }
+
+    #[test]
+    fn test_channel_hash() {
+        let mut ch = Channel::new(0);
+        ch.set_key(&[0x01, 0x02, 0x03, 0x04]);
+
+
+        assert_eq!(ch.hash(), 0x04);
+    }
+
+    #[test]
+    fn test_channel_set() {
+        let mut set = ChannelSet::new();
+        assert_eq!(set.count(), 1);
+
+        let mut secondary = Channel::new(1);
+        secondary.set_name("Secondary");
+        set.set(1, secondary);
+
+        assert_eq!(set.count(), 2);
+        assert_eq!(set.get(1).unwrap().name_str(), "Secondary");
+    }
+
+    #[test]
+    fn test_modem_preset_params() {
+        let params = ModemPreset::LongFast.lora_params();
+        assert_eq!(params.spreading_factor, 11);
+        assert_eq!(params.bandwidth, 125_000);
+        assert_eq!(params.coding_rate, 8);
+    }
+
+    #[test]
+    fn test_base64_encode() {
+        let data = b"Hello";
+        let mut output = [0u8; 16];
+        let len = base64_encode(data, &mut output);
+        assert_eq!(&output[..len], b"SGVsbG8");
+    }
+
+    #[test]
+    fn test_base64_decode() {
+        let data = b"SGVsbG8";
+        let mut output = [0u8; 16];
+        let len = base64_decode(data, &mut output);
+        assert_eq!(&output[..len], b"Hello");
+    }
+
+    #[test]
+    fn test_base64_roundtrip() {
+        let original = [0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34];
+        let mut encoded = [0u8; 16];
+        let enc_len = base64_encode(&original, &mut encoded);
+
+        let mut decoded = [0u8; 16];
+        let dec_len = base64_decode(&encoded[..enc_len], &mut decoded);
+
+        assert_eq!(&decoded[..dec_len], &original);
+    }
+
+    #[test]
+    fn test_airtime_calculation() {
+
+        let airtime = ModemPreset::LongFast.airtime_ms(50);
+        assert!(airtime > 100);
+        assert!(airtime < 2000);
+    }
 }

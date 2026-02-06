@@ -1,6 +1,7 @@
 use heapless::Vec;
 use super::{DataPayload, Position, User, PortNum, HardwareModel, Role, LocationSource, MAX_LORA_PAYLOAD};
 
+
 const WIRE_TYPE_VARINT: u8 = 0;
 
 const WIRE_TYPE_64BIT: u8 = 1;
@@ -8,6 +9,7 @@ const WIRE_TYPE_64BIT: u8 = 1;
 const WIRE_TYPE_LENGTH_DELIMITED: u8 = 2;
 
 const WIRE_TYPE_32BIT: u8 = 5;
+
 
 mod data_fields {
     pub const PORTNUM: u32 = 1;
@@ -19,6 +21,7 @@ mod data_fields {
     pub const REPLY_ID: u32 = 7;
     pub const EMOJI: u32 = 8;
 }
+
 
 mod position_fields {
     pub const LATITUDE_I: u32 = 1;
@@ -45,6 +48,7 @@ mod position_fields {
     pub const SEQ_NUMBER: u32 = 22;
 }
 
+
 mod user_fields {
     pub const ID: u32 = 1;
     pub const LONG_NAME: u32 = 2;
@@ -54,6 +58,7 @@ mod user_fields {
     pub const IS_LICENSED: u32 = 6;
     pub const ROLE: u32 = 7;
 }
+
 
 pub struct ProtobufEncoder<const N: usize> {
     buffer: Vec<u8, N>,
@@ -67,9 +72,11 @@ impl<const N: usize> ProtobufEncoder<N> {
         }
     }
 
+
     pub fn finish(self) -> Vec<u8, N> {
         self.buffer
     }
+
 
     pub fn write_varint(&mut self, value: u64) -> bool {
         let mut v = value;
@@ -86,20 +93,24 @@ impl<const N: usize> ProtobufEncoder<N> {
         }
     }
 
+
     pub fn write_sint32(&mut self, value: i32) -> bool {
         let encoded = ((value << 1) ^ (value >> 31)) as u32;
         self.write_varint(encoded as u64)
     }
+
 
     pub fn write_sint64(&mut self, value: i64) -> bool {
         let encoded = ((value << 1) ^ (value >> 63)) as u64;
         self.write_varint(encoded)
     }
 
+
     pub fn write_tag(&mut self, field_number: u32, wire_type: u8) -> bool {
         let tag = (field_number << 3) | (wire_type as u32);
         self.write_varint(tag as u64)
     }
+
 
     pub fn write_varint_field(&mut self, field_number: u32, value: u64) -> bool {
         if value == 0 {
@@ -108,6 +119,7 @@ impl<const N: usize> ProtobufEncoder<N> {
         self.write_tag(field_number, WIRE_TYPE_VARINT) && self.write_varint(value)
     }
 
+
     pub fn write_sint32_field(&mut self, field_number: u32, value: i32) -> bool {
         if value == 0 {
             return true;
@@ -115,12 +127,14 @@ impl<const N: usize> ProtobufEncoder<N> {
         self.write_tag(field_number, WIRE_TYPE_VARINT) && self.write_sint32(value)
     }
 
+
     pub fn write_bool_field(&mut self, field_number: u32, value: bool) -> bool {
         if !value {
             return true;
         }
         self.write_tag(field_number, WIRE_TYPE_VARINT) && self.buffer.push(1).is_ok()
     }
+
 
     pub fn write_bytes_field(&mut self, field_number: u32, data: &[u8]) -> bool {
         if data.is_empty() {
@@ -131,9 +145,11 @@ impl<const N: usize> ProtobufEncoder<N> {
             && self.buffer.extend_from_slice(data).is_ok()
     }
 
+
     pub fn write_string_field(&mut self, field_number: u32, s: &str) -> bool {
         self.write_bytes_field(field_number, s.as_bytes())
     }
+
 
     pub fn write_fixed32_field(&mut self, field_number: u32, value: u32) -> bool {
         if value == 0 {
@@ -146,6 +162,7 @@ impl<const N: usize> ProtobufEncoder<N> {
         self.buffer.extend_from_slice(&bytes).is_ok()
     }
 
+
     pub fn write_fixed64_field(&mut self, field_number: u32, value: u64) -> bool {
         if value == 0 {
             return true;
@@ -156,6 +173,7 @@ impl<const N: usize> ProtobufEncoder<N> {
         let bytes = value.to_le_bytes();
         self.buffer.extend_from_slice(&bytes).is_ok()
     }
+
 
     pub fn write_message_field<F>(&mut self, field_number: u32, encode_fn: F) -> bool
     where
@@ -181,6 +199,7 @@ impl<const N: usize> Default for ProtobufEncoder<N> {
 
 impl<const N: usize> ProtobufEncoder<N> {
 
+
     pub fn encode_varint_to_slice<const M: usize>(value: u64, output: &mut Vec<u8, M>) {
         let mut v = value;
         loop {
@@ -196,6 +215,7 @@ impl<const N: usize> ProtobufEncoder<N> {
     }
 }
 
+
 pub struct ProtobufDecoder<'a> {
     data: &'a [u8],
     pos: usize,
@@ -207,9 +227,11 @@ impl<'a> ProtobufDecoder<'a> {
         Self { data, pos: 0 }
     }
 
+
     pub fn has_more(&self) -> bool {
         self.pos < self.data.len()
     }
+
 
     pub fn read_varint(&mut self) -> Option<u64> {
         let mut result: u64 = 0;
@@ -236,15 +258,18 @@ impl<'a> ProtobufDecoder<'a> {
         }
     }
 
+
     pub fn read_sint32(&mut self) -> Option<i32> {
         let encoded = self.read_varint()? as u32;
         Some(((encoded >> 1) as i32) ^ -((encoded & 1) as i32))
     }
 
+
     pub fn read_sint64(&mut self) -> Option<i64> {
         let encoded = self.read_varint()?;
         Some(((encoded >> 1) as i64) ^ -((encoded & 1) as i64))
     }
+
 
     pub fn read_tag(&mut self) -> Option<(u32, u8)> {
         let tag = self.read_varint()? as u32;
@@ -252,6 +277,7 @@ impl<'a> ProtobufDecoder<'a> {
         let wire_type = (tag & 0x07) as u8;
         Some((field_number, wire_type))
     }
+
 
     pub fn next_field(&mut self) -> Option<(u32, u8, &'a [u8])> {
         if !self.has_more() {
@@ -304,6 +330,7 @@ impl<'a> ProtobufDecoder<'a> {
         Some((field_number, wire_type, field_data))
     }
 
+
     pub fn read_bytes(&mut self) -> Option<&'a [u8]> {
         let len = self.read_varint()? as usize;
         if self.pos + len > self.data.len() {
@@ -313,6 +340,7 @@ impl<'a> ProtobufDecoder<'a> {
         self.pos += len;
         Some(result)
     }
+
 
     pub fn read_fixed32(&mut self) -> Option<u32> {
         if self.pos + 4 > self.data.len() {
@@ -327,6 +355,7 @@ impl<'a> ProtobufDecoder<'a> {
         self.pos += 4;
         Some(result)
     }
+
 
     pub fn read_fixed64(&mut self) -> Option<u64> {
         if self.pos + 8 > self.data.len() {
@@ -345,6 +374,7 @@ impl<'a> ProtobufDecoder<'a> {
         self.pos += 8;
         Some(result)
     }
+
 
     pub fn skip_field(&mut self, wire_type: u8) -> bool {
         match wire_type {
@@ -370,6 +400,7 @@ impl<'a> ProtobufDecoder<'a> {
         }
     }
 
+
     pub fn read_varint_from_slice(data: &[u8]) -> Option<u64> {
         let mut result: u64 = 0;
         let mut shift = 0;
@@ -389,6 +420,7 @@ impl<'a> ProtobufDecoder<'a> {
 
         None
     }
+
 
     pub fn read_varint_advancing(data: &mut &[u8]) -> Option<u64> {
         let mut result: u64 = 0;
@@ -413,6 +445,7 @@ impl<'a> ProtobufDecoder<'a> {
         None
     }
 
+
     pub fn read_bytes_from_slice<'b>(data: &mut &'b [u8]) -> Option<&'b [u8]> {
         let len = Self::read_varint_advancing(data)? as usize;
         if data.len() < len {
@@ -423,12 +456,14 @@ impl<'a> ProtobufDecoder<'a> {
         Some(result)
     }
 
+
     pub fn read_tag_from_slice(data: &mut &[u8]) -> Option<(u32, u8)> {
         let tag = Self::read_varint_advancing(data)? as u32;
         let field_number = tag >> 3;
         let wire_type = (tag & 0x07) as u8;
         Some((field_number, wire_type))
     }
+
 
     pub fn skip_field_from_slice(data: &mut &[u8], wire_type: u8) -> bool {
         match wire_type {
@@ -455,6 +490,7 @@ impl<'a> ProtobufDecoder<'a> {
     }
 }
 
+
 pub fn encode_data(data: &DataPayload) -> Option<Vec<u8, MAX_LORA_PAYLOAD>> {
     let mut encoder = ProtobufEncoder::<MAX_LORA_PAYLOAD>::new();
 
@@ -470,8 +506,10 @@ pub fn encode_data(data: &DataPayload) -> Option<Vec<u8, MAX_LORA_PAYLOAD>> {
     Some(encoder.finish())
 }
 
+
 pub fn encode_position(pos: &Position) -> Option<Vec<u8, MAX_LORA_PAYLOAD>> {
     let mut encoder = ProtobufEncoder::<MAX_LORA_PAYLOAD>::new();
+
 
     encoder.write_sint32_field(position_fields::LATITUDE_I, pos.latitude_i);
     encoder.write_sint32_field(position_fields::LONGITUDE_I, pos.longitude_i);
@@ -492,8 +530,10 @@ pub fn encode_position(pos: &Position) -> Option<Vec<u8, MAX_LORA_PAYLOAD>> {
     Some(encoder.finish())
 }
 
+
 pub fn encode_user(user: &User) -> Option<Vec<u8, MAX_LORA_PAYLOAD>> {
     let mut encoder = ProtobufEncoder::<MAX_LORA_PAYLOAD>::new();
+
 
     let mut id_str = [0u8; 17];
     id_str[0] = b'!';
@@ -509,6 +549,7 @@ pub fn encode_user(user: &User) -> Option<Vec<u8, MAX_LORA_PAYLOAD>> {
 
     Some(encoder.finish())
 }
+
 
 pub fn decode_data(data: &[u8]) -> Option<DataPayload> {
     let mut decoder = ProtobufDecoder::new(data);
@@ -553,6 +594,7 @@ pub fn decode_data(data: &[u8]) -> Option<DataPayload> {
 
     Some(result)
 }
+
 
 pub fn decode_position(data: &[u8]) -> Option<Position> {
     let mut decoder = ProtobufDecoder::new(data);
@@ -627,6 +669,7 @@ pub fn decode_position(data: &[u8]) -> Option<Position> {
 
     Some(result)
 }
+
 
 pub fn decode_user(data: &[u8]) -> Option<User> {
     let mut decoder = ProtobufDecoder::new(data);
@@ -709,6 +752,7 @@ pub fn decode_user(data: &[u8]) -> Option<User> {
     Some(result)
 }
 
+
 fn hex_encode(data: &[u8], output: &mut [u8]) {
     const HEX_CHARS: &[u8; 16] = b"0123456789abcdef";
     for (i, &byte) in data.iter().enumerate() {
@@ -718,6 +762,7 @@ fn hex_encode(data: &[u8], output: &mut [u8]) {
         }
     }
 }
+
 
 fn hex_decode(data: &[u8], output: &mut [u8]) {
     fn hex_val(c: u8) -> u8 {
@@ -736,6 +781,7 @@ fn hex_decode(data: &[u8], output: &mut [u8]) {
     }
 }
 
+
 mod nodeinfo_fields {
     pub const NUM: u32 = 1;
     pub const USER: u32 = 2;
@@ -744,6 +790,7 @@ mod nodeinfo_fields {
     pub const LAST_HEARD: u32 = 5;
     pub const DEVICE_METRICS: u32 = 6;
 }
+
 
 pub fn encode_nodeinfo(
     num: u32,
@@ -766,6 +813,7 @@ pub fn encode_nodeinfo(
         encoder.write_bytes_field(nodeinfo_fields::POSITION, &pos_data);
     }
 
+
     if snr != 0.0 {
         encoder.write_fixed32_field(nodeinfo_fields::SNR, snr.to_bits());
     }
@@ -774,6 +822,7 @@ pub fn encode_nodeinfo(
 
     Some(encoder.finish())
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -792,17 +841,20 @@ pub enum RoutingError {
     NotAuthorized = 33,
 }
 
+
 mod routing_fields {
     pub const ROUTE_REQUEST: u32 = 1;
     pub const ROUTE_REPLY: u32 = 2;
     pub const ERROR_REASON: u32 = 3;
 }
 
+
 pub fn encode_routing_error(error: RoutingError) -> Option<Vec<u8, 16>> {
     let mut encoder = ProtobufEncoder::<16>::new();
     encoder.write_varint_field(routing_fields::ERROR_REASON, error as u64);
     Some(encoder.finish())
 }
+
 
 pub fn decode_routing_error(data: &[u8]) -> Option<RoutingError> {
     let mut decoder = ProtobufDecoder::new(data);
@@ -833,6 +885,7 @@ pub fn decode_routing_error(data: &[u8]) -> Option<RoutingError> {
 
     None
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -872,6 +925,7 @@ pub enum AdminOp {
     NodedbReset = 100,
 }
 
+
 mod telemetry_fields {
     pub const TIME: u32 = 1;
     pub const DEVICE_METRICS: u32 = 2;
@@ -880,6 +934,7 @@ mod telemetry_fields {
     pub const POWER_METRICS: u32 = 5;
 }
 
+
 mod device_metrics_fields {
     pub const BATTERY_LEVEL: u32 = 1;
     pub const VOLTAGE: u32 = 2;
@@ -887,6 +942,7 @@ mod device_metrics_fields {
     pub const AIR_UTIL_TX: u32 = 4;
     pub const UPTIME_SECONDS: u32 = 5;
 }
+
 
 #[derive(Debug, Clone, Default)]
 pub struct DeviceMetrics {
@@ -902,6 +958,7 @@ pub struct DeviceMetrics {
     pub uptime_seconds: u32,
 }
 
+
 pub fn encode_device_metrics(metrics: &DeviceMetrics) -> Option<Vec<u8, 64>> {
     let mut encoder = ProtobufEncoder::<64>::new();
 
@@ -914,6 +971,7 @@ pub fn encode_device_metrics(metrics: &DeviceMetrics) -> Option<Vec<u8, 64>> {
     Some(encoder.finish())
 }
 
+
 pub fn encode_telemetry(time: u32, metrics: &DeviceMetrics) -> Option<Vec<u8, MAX_LORA_PAYLOAD>> {
     let mut encoder = ProtobufEncoder::<MAX_LORA_PAYLOAD>::new();
 
@@ -924,6 +982,7 @@ pub fn encode_telemetry(time: u32, metrics: &DeviceMetrics) -> Option<Vec<u8, MA
 
     Some(encoder.finish())
 }
+
 
 pub fn decode_device_metrics(data: &[u8]) -> Option<DeviceMetrics> {
     let mut decoder = ProtobufDecoder::new(data);
@@ -957,11 +1016,13 @@ pub fn decode_device_metrics(data: &[u8]) -> Option<DeviceMetrics> {
     Some(result)
 }
 
+
 mod to_radio_fields {
     pub const PACKET: u32 = 1;
     pub const WANT_CONFIG_ID: u32 = 3;
     pub const DISCONNECT: u32 = 4;
 }
+
 
 mod from_radio_fields {
     pub const ID: u32 = 1;
@@ -979,6 +1040,7 @@ mod from_radio_fields {
     pub const METADATA: u32 = 13;
     pub const MQTTCLIENT_PROXY_MESSAGE: u32 = 14;
 }
+
 
 mod mesh_packet_fields {
     pub const FROM: u32 = 1;
@@ -998,6 +1060,7 @@ mod mesh_packet_fields {
     pub const HOP_START: u32 = 15;
 }
 
+
 pub enum ToRadio {
 
     Packet(super::MeshPacket),
@@ -1006,6 +1069,7 @@ pub enum ToRadio {
 
     Disconnect,
 }
+
 
 pub fn decode_to_radio(data: &[u8]) -> Option<ToRadio> {
     let mut decoder = ProtobufDecoder::new(data);
@@ -1037,6 +1101,7 @@ pub fn decode_to_radio(data: &[u8]) -> Option<ToRadio> {
 
     None
 }
+
 
 pub fn decode_mesh_packet(data: &[u8]) -> Option<super::MeshPacket> {
     let mut decoder = ProtobufDecoder::new(data);
@@ -1100,6 +1165,7 @@ pub fn decode_mesh_packet(data: &[u8]) -> Option<super::MeshPacket> {
     Some(packet)
 }
 
+
 pub fn encode_mesh_packet(packet: &super::MeshPacket) -> Option<heapless::Vec<u8, 256>> {
     let mut encoder = ProtobufEncoder::<256>::new();
 
@@ -1137,22 +1203,26 @@ pub fn encode_mesh_packet(packet: &super::MeshPacket) -> Option<heapless::Vec<u8
     Some(encoder.finish())
 }
 
+
 fn next_from_radio_id() -> u32 {
     use core::sync::atomic::{AtomicU32, Ordering};
     static FROM_RADIO_ID: AtomicU32 = AtomicU32::new(0);
     FROM_RADIO_ID.fetch_add(1, Ordering::SeqCst).wrapping_add(1)
 }
 
+
 pub fn encode_from_radio_packet(packet: &super::MeshPacket) -> Option<heapless::Vec<u8, 512>> {
     let mut encoder = ProtobufEncoder::<512>::new();
 
     encoder.write_varint_field(from_radio_fields::ID, next_from_radio_id() as u64);
+
 
     let packet_data = encode_mesh_packet(packet)?;
     encoder.write_bytes_field(from_radio_fields::PACKET, &packet_data);
 
     Some(encoder.finish())
 }
+
 
 mod my_info_fields {
     pub const MY_NODE_NUM: u32 = 1;
@@ -1161,6 +1231,7 @@ mod my_info_fields {
     pub const DEVICE_ID: u32 = 12;
 }
 
+
 pub fn encode_from_radio_my_info(
     node_num: u32,
     reboot_count: u32,
@@ -1168,6 +1239,7 @@ pub fn encode_from_radio_my_info(
     let mut encoder = ProtobufEncoder::<512>::new();
 
     encoder.write_varint_field(from_radio_fields::ID, next_from_radio_id() as u64);
+
 
     encoder.write_message_field(from_radio_fields::MY_INFO, |inner| {
         inner.write_varint_field(my_info_fields::MY_NODE_NUM, node_num as u64);
@@ -1178,6 +1250,7 @@ pub fn encode_from_radio_my_info(
 
     Some(encoder.finish())
 }
+
 
 mod node_info_fields {
     pub const NUM: u32 = 1;
@@ -1192,6 +1265,7 @@ mod node_info_fields {
     pub const IS_FAVORITE: u32 = 10;
 }
 
+
 pub fn encode_from_radio_node_info(
     node_info: &super::NodeInfo,
 ) -> Option<heapless::Vec<u8, 512>> {
@@ -1199,8 +1273,10 @@ pub fn encode_from_radio_node_info(
 
     encoder.write_varint_field(from_radio_fields::ID, next_from_radio_id() as u64);
 
+
     encoder.write_message_field(from_radio_fields::NODE_INFO, |inner| {
         inner.write_varint_field(node_info_fields::NUM, node_info.num as u64);
+
 
         if let Some(ref user) = node_info.user {
             let user_data = encode_user(user);
@@ -1208,6 +1284,7 @@ pub fn encode_from_radio_node_info(
                 inner.write_bytes_field(node_info_fields::USER, &data);
             }
         }
+
 
         if let Some(ref position) = node_info.position {
             let pos_data = encode_position(position);
@@ -1227,11 +1304,13 @@ pub fn encode_from_radio_node_info(
     Some(encoder.finish())
 }
 
+
 mod channel_fields {
     pub const INDEX: u32 = 1;
     pub const SETTINGS: u32 = 2;
     pub const ROLE: u32 = 3;
 }
+
 
 mod channel_settings_fields {
     pub const CHANNEL_NUM: u32 = 1;
@@ -1243,6 +1322,7 @@ mod channel_settings_fields {
     pub const MODULE_SETTINGS: u32 = 7;
 }
 
+
 pub fn encode_from_radio_channel(
     index: u8,
     channel: &super::Channel,
@@ -1252,15 +1332,19 @@ pub fn encode_from_radio_channel(
 
     encoder.write_varint_field(from_radio_fields::ID, next_from_radio_id() as u64);
 
+
     encoder.write_message_field(from_radio_fields::CHANNEL, |inner| {
         inner.write_varint_field(channel_fields::INDEX, index as u64);
+
 
         inner.write_message_field(channel_fields::SETTINGS, |settings| {
             settings.write_varint_field(channel_settings_fields::CHANNEL_NUM, index as u64);
 
+
             settings.write_string_field(channel_settings_fields::NAME, channel.name_str());
             true
         });
+
 
         let role = if is_primary { 1u64 } else { 2u64 };
         inner.write_varint_field(channel_fields::ROLE, role);
@@ -1271,6 +1355,7 @@ pub fn encode_from_radio_channel(
     Some(encoder.finish())
 }
 
+
 pub fn encode_from_radio_config_complete(config_id: u32) -> Option<heapless::Vec<u8, 512>> {
     let mut encoder = ProtobufEncoder::<512>::new();
 
@@ -1278,4 +1363,118 @@ pub fn encode_from_radio_config_complete(config_id: u32) -> Option<heapless::Vec
     encoder.write_varint_field(from_radio_fields::CONFIG_COMPLETE_ID, config_id as u64);
 
     Some(encoder.finish())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_varint_encoding() {
+        let mut encoder = ProtobufEncoder::<16>::new();
+        assert!(encoder.write_varint(300));
+        let result = encoder.finish();
+
+        assert_eq!(&result[..], &[0xAC, 0x02]);
+    }
+
+    #[test]
+    fn test_varint_decoding() {
+        let data = [0xAC, 0x02];
+        let mut decoder = ProtobufDecoder::new(&data);
+        assert_eq!(decoder.read_varint(), Some(300));
+    }
+
+    #[test]
+    fn test_data_roundtrip() {
+        let original = DataPayload {
+            port: PortNum::TextMessage,
+            payload: Vec::from_slice(b"Hello").unwrap(),
+            want_response: true,
+            dest: 0xFFFFFFFF,
+            source: 0x12345678,
+            request_id: 0,
+            reply_id: 0,
+            emoji: 0,
+        };
+
+        let encoded = encode_data(&original).unwrap();
+        let decoded = decode_data(&encoded).unwrap();
+
+        assert_eq!(decoded.port, original.port);
+        assert_eq!(&decoded.payload[..], &original.payload[..]);
+        assert_eq!(decoded.want_response, original.want_response);
+        assert_eq!(decoded.source, original.source);
+    }
+
+    #[test]
+    fn test_position_roundtrip() {
+        let original = Position {
+            latitude_i: 374220000,
+            longitude_i: -1220840000,
+            altitude: 100,
+            time: 1700000000,
+            location_source: LocationSource::InternalGps,
+            ..Default::default()
+        };
+
+        let encoded = encode_position(&original).unwrap();
+        let decoded = decode_position(&encoded).unwrap();
+
+        assert_eq!(decoded.latitude_i, original.latitude_i);
+        assert_eq!(decoded.longitude_i, original.longitude_i);
+        assert_eq!(decoded.altitude, original.altitude);
+        assert_eq!(decoded.location_source, original.location_source);
+    }
+
+    #[test]
+    fn test_hex_encode() {
+        let data = [0xDE, 0xAD, 0xBE, 0xEF];
+        let mut output = [0u8; 8];
+        hex_encode(&data, &mut output);
+        assert_eq!(&output, b"deadbeef");
+    }
+
+    #[test]
+    fn test_hex_decode() {
+        let data = b"deadbeef";
+        let mut output = [0u8; 4];
+        hex_decode(data, &mut output);
+        assert_eq!(&output, &[0xDE, 0xAD, 0xBE, 0xEF]);
+    }
+
+    #[test]
+    fn test_sint32_encoding() {
+
+        let mut encoder = ProtobufEncoder::<16>::new();
+        encoder.write_sint32(-1);
+        let result = encoder.finish();
+
+        assert_eq!(&result[..], &[0x01]);
+
+        let mut encoder = ProtobufEncoder::<16>::new();
+        encoder.write_sint32(1);
+        let result = encoder.finish();
+
+        assert_eq!(&result[..], &[0x02]);
+
+        let mut encoder = ProtobufEncoder::<16>::new();
+        encoder.write_sint32(-2);
+        let result = encoder.finish();
+
+        assert_eq!(&result[..], &[0x03]);
+    }
+
+    #[test]
+    fn test_sint32_decoding() {
+        let mut decoder = ProtobufDecoder::new(&[0x01]);
+        assert_eq!(decoder.read_sint32(), Some(-1));
+
+        let mut decoder = ProtobufDecoder::new(&[0x02]);
+        assert_eq!(decoder.read_sint32(), Some(1));
+
+        let mut decoder = ProtobufDecoder::new(&[0x03]);
+        assert_eq!(decoder.read_sint32(), Some(-2));
+    }
 }

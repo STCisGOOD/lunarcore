@@ -4,6 +4,7 @@ use crate::crypto::{
 };
 use heapless::Vec as HeaplessVec;
 
+
 pub const CONTACT_HELLO_VERSION: u8 = 0x03;
 
 pub const ED25519_PK_SIZE: usize = 32;
@@ -18,9 +19,11 @@ pub const MAX_DID_LENGTH: usize = 128;
 
 pub const MAX_NAME_LENGTH: usize = 64;
 
+
 pub const DILITHIUM_PK_SIZE: usize = 1952;
 
 pub const DILITHIUM_SIG_SIZE: usize = 2420;
+
 
 #[derive(Debug, Clone)]
 pub struct ContactHello {
@@ -41,6 +44,7 @@ pub struct ContactHello {
 
     pub signature: [u8; ED25519_SIG_SIZE],
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContactHelloError {
@@ -93,11 +97,13 @@ impl ContactHello {
         })
     }
 
+
     pub fn sign(&mut self, private_key: &[u8; 32]) {
         let data_to_sign = self.encode_for_signing();
         let sig = Ed25519::sign(private_key, &data_to_sign);
         self.signature = sig.0;
     }
+
 
     pub fn verify(&self) -> Result<bool, ContactHelloError> {
         let data = self.encode_for_signing();
@@ -105,28 +111,37 @@ impl ContactHello {
         Ok(Ed25519::verify(&self.ed25519_public, &data, &sig))
     }
 
+
     fn encode_for_signing(&self) -> HeaplessVec<u8, 256> {
         let mut buf = HeaplessVec::new();
 
+
         let _ = buf.push(self.version);
 
+
         let _ = buf.extend_from_slice(&self.timestamp.to_le_bytes());
+
 
         let did_len = self.did.len() as u16;
         let _ = buf.extend_from_slice(&did_len.to_le_bytes());
         let _ = buf.extend_from_slice(&self.did);
 
+
         let _ = buf.extend_from_slice(&self.ed25519_public);
+
 
         let _ = buf.extend_from_slice(&self.x25519_public);
 
+
         let _ = buf.push(self.name.len() as u8);
         let _ = buf.extend_from_slice(&self.name);
+
 
         let _ = buf.extend_from_slice(&self.avatar_hash);
 
         buf
     }
+
 
     pub fn encode(&self) -> HeaplessVec<u8, 512> {
         let signed_data = self.encode_for_signing();
@@ -136,6 +151,7 @@ impl ContactHello {
         buf
     }
 
+
     pub fn decode(data: &[u8]) -> Result<Self, ContactHelloError> {
         if data.len() < 1 + 8 + 2 + 32 + 32 + 1 + 32 + 64 {
             return Err(ContactHelloError::InvalidFormat);
@@ -143,16 +159,19 @@ impl ContactHello {
 
         let mut pos = 0;
 
+
         let version = data[pos];
         if version != CONTACT_HELLO_VERSION {
             return Err(ContactHelloError::InvalidVersion);
         }
         pos += 1;
 
+
         let mut ts_bytes = [0u8; 8];
         ts_bytes.copy_from_slice(&data[pos..pos + 8]);
         let timestamp = u64::from_le_bytes(ts_bytes);
         pos += 8;
+
 
         let mut did_len_bytes = [0u8; 2];
         did_len_bytes.copy_from_slice(&data[pos..pos + 2]);
@@ -168,6 +187,7 @@ impl ContactHello {
             .map_err(|_| ContactHelloError::DidTooLong)?;
         pos += did_len;
 
+
         if pos + 32 > data.len() {
             return Err(ContactHelloError::InvalidFormat);
         }
@@ -175,12 +195,14 @@ impl ContactHello {
         ed25519_public.copy_from_slice(&data[pos..pos + 32]);
         pos += 32;
 
+
         if pos + 32 > data.len() {
             return Err(ContactHelloError::InvalidFormat);
         }
         let mut x25519_public = [0u8; 32];
         x25519_public.copy_from_slice(&data[pos..pos + 32]);
         pos += 32;
+
 
         if pos >= data.len() {
             return Err(ContactHelloError::InvalidFormat);
@@ -197,12 +219,14 @@ impl ContactHello {
             .map_err(|_| ContactHelloError::NameTooLong)?;
         pos += name_len;
 
+
         if pos + 32 > data.len() {
             return Err(ContactHelloError::InvalidFormat);
         }
         let mut avatar_hash = [0u8; 32];
         avatar_hash.copy_from_slice(&data[pos..pos + 32]);
         pos += 32;
+
 
         if pos + 64 > data.len() {
             return Err(ContactHelloError::InvalidFormat);
@@ -222,13 +246,16 @@ impl ContactHello {
         })
     }
 
+
     pub fn to_qr_data(&self) -> HeaplessVec<u8, 512> {
+
 
         let mut buf = HeaplessVec::new();
         let _ = buf.extend_from_slice(b"YCH:");
         let _ = buf.extend_from_slice(&self.encode());
         buf
     }
+
 
     pub fn from_qr_data(data: &[u8]) -> Result<Self, ContactHelloError> {
         if data.len() < 4 || &data[..4] != b"YCH:" {
@@ -237,6 +264,7 @@ impl ContactHello {
         Self::decode(&data[4..])
     }
 
+
     pub fn fingerprint(&self) -> [u8; 8] {
         let hash = Sha256::hash(&self.ed25519_public);
         let mut fp = [0u8; 8];
@@ -244,6 +272,7 @@ impl ContactHello {
         fp
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TrustLevel {
@@ -256,6 +285,7 @@ pub enum TrustLevel {
 
     Trusted = 3,
 }
+
 
 #[derive(Debug, Clone)]
 pub struct Contact {
@@ -295,25 +325,32 @@ impl Contact {
         }
     }
 
+
     pub fn serialize(&self) -> HeaplessVec<u8, 512> {
         let mut buf = HeaplessVec::new();
+
 
         let hello_encoded = self.hello.encode();
         let hello_len = hello_encoded.len() as u16;
         let _ = buf.extend_from_slice(&hello_len.to_le_bytes());
         let _ = buf.extend_from_slice(&hello_encoded);
 
+
         let _ = buf.push(self.trust as u8);
+
 
         let _ = buf.push(self.petname.len() as u8);
         let _ = buf.extend_from_slice(&self.petname);
 
+
         let _ = buf.extend_from_slice(&self.last_seen.to_le_bytes());
+
 
         let _ = buf.extend_from_slice(&self.message_count.to_le_bytes());
 
         buf
     }
+
 
     pub fn deserialize(data: &[u8]) -> Option<Self> {
         if data.len() < 2 {
@@ -321,6 +358,7 @@ impl Contact {
         }
 
         let mut pos = 0;
+
 
         let mut hello_len_bytes = [0u8; 2];
         hello_len_bytes.copy_from_slice(&data[pos..pos + 2]);
@@ -331,8 +369,10 @@ impl Contact {
             return None;
         }
 
+
         let hello = ContactHello::decode(&data[pos..pos + hello_len]).ok()?;
         pos += hello_len;
+
 
         if pos >= data.len() {
             return None;
@@ -345,6 +385,7 @@ impl Contact {
             _ => TrustLevel::Unknown,
         };
         pos += 1;
+
 
         if pos >= data.len() {
             return None;
@@ -359,6 +400,7 @@ impl Contact {
         let _ = petname.extend_from_slice(&data[pos..pos + petname_len]);
         pos += petname_len;
 
+
         if pos + 8 > data.len() {
             return None;
         }
@@ -366,6 +408,7 @@ impl Contact {
         last_seen_bytes.copy_from_slice(&data[pos..pos + 8]);
         let last_seen = u64::from_le_bytes(last_seen_bytes);
         pos += 8;
+
 
         if pos + 4 > data.len() {
             return None;
@@ -383,14 +426,18 @@ impl Contact {
         })
     }
 
+
     pub fn key(&self) -> [u8; 8] {
         self.hello.fingerprint()
     }
 }
 
+
 const NVS_CONTACT_NAMESPACE: &[u8] = b"contacts\0";
 
+
 const MAX_CONTACTS: usize = 64;
+
 
 pub struct ContactStore {
 
@@ -404,39 +451,48 @@ impl ContactStore {
         }
     }
 
+
     pub fn add(&mut self, contact: Contact) -> Result<(), ContactHelloError> {
         let key = contact.key();
         let _ = self.contacts.insert(key, contact);
         Ok(())
     }
 
+
     pub fn get(&self, fingerprint: &[u8; 8]) -> Option<&Contact> {
         self.contacts.get(fingerprint)
     }
+
 
     pub fn get_mut(&mut self, fingerprint: &[u8; 8]) -> Option<&mut Contact> {
         self.contacts.get_mut(fingerprint)
     }
 
+
     pub fn remove(&mut self, fingerprint: &[u8; 8]) -> Option<Contact> {
         self.contacts.remove(fingerprint)
     }
+
 
     pub fn len(&self) -> usize {
         self.contacts.len()
     }
 
+
     pub fn is_empty(&self) -> bool {
         self.contacts.is_empty()
     }
+
 
     pub fn iter(&self) -> impl Iterator<Item = (&[u8; 8], &Contact)> {
         self.contacts.iter()
     }
 
+
     pub fn find_by_pubkey(&self, ed25519_public: &[u8; 32]) -> Option<&Contact> {
         self.contacts.values().find(|c| &c.hello.ed25519_public == ed25519_public)
     }
+
 
     #[cfg(target_arch = "xtensa")]
     pub fn save_to_nvs(&self) -> Result<(), ContactHelloError> {
@@ -448,6 +504,7 @@ impl ContactStore {
             let namespace = core::ffi::CStr::from_ptr(
                 NVS_CONTACT_NAMESPACE.as_ptr() as *const core::ffi::c_char
             );
+
 
             let mut err = nvs_open(
                 namespace.as_ptr(),
@@ -467,10 +524,12 @@ impl ContactStore {
                 }
             }
 
+
             let count_key = core::ffi::CStr::from_ptr(
                 b"cnt_count\0".as_ptr() as *const core::ffi::c_char
             );
             nvs_set_u32(handle, count_key.as_ptr(), self.contacts.len() as u32);
+
 
             let mut idx = 0u32;
             for (_key, contact) in self.contacts.iter() {
@@ -490,6 +549,7 @@ impl ContactStore {
                     key_name.as_ptr() as *const core::ffi::c_char
                 );
 
+
                 let blob = contact.serialize();
 
                 nvs_set_blob(
@@ -502,6 +562,7 @@ impl ContactStore {
                 idx += 1;
             }
 
+
             nvs_commit(handle);
             nvs_close(handle);
 
@@ -510,6 +571,7 @@ impl ContactStore {
 
         Ok(())
     }
+
 
     #[cfg(target_arch = "xtensa")]
     pub fn load_from_nvs(&mut self) -> Result<usize, ContactHelloError> {
@@ -532,6 +594,7 @@ impl ContactStore {
                 return Ok(0);
             }
 
+
             let count_key = core::ffi::CStr::from_ptr(
                 b"cnt_count\0".as_ptr() as *const core::ffi::c_char
             );
@@ -542,6 +605,7 @@ impl ContactStore {
             }
 
             let count = core::cmp::min(count as usize, MAX_CONTACTS);
+
 
             let mut loaded = 0;
             for idx in 0..count {
@@ -560,6 +624,7 @@ impl ContactStore {
                 let key_cstr = core::ffi::CStr::from_ptr(
                     key_name.as_ptr() as *const core::ffi::c_char
                 );
+
 
                 let mut blob = [0u8; 512];
                 let mut blob_len = blob.len();
@@ -586,6 +651,7 @@ impl ContactStore {
         }
     }
 
+
     #[cfg(not(target_arch = "xtensa"))]
     pub fn save_to_nvs(&self) -> Result<(), ContactHelloError> {
         Ok(())
@@ -594,5 +660,53 @@ impl ContactStore {
     #[cfg(not(target_arch = "xtensa"))]
     pub fn load_from_nvs(&mut self) -> Result<usize, ContactHelloError> {
         Ok(0)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_contact_hello_roundtrip() {
+        let mut hello = ContactHello::new(
+            1234567890000,
+            b"did:offgrid:zTestDid",
+            [1u8; 32],
+            [2u8; 32],
+            b"Alice",
+            None,
+        ).unwrap();
+
+
+        let private_key = [0u8; 32];
+        hello.sign(&private_key);
+
+
+        let encoded = hello.encode();
+        let decoded = ContactHello::decode(&encoded).unwrap();
+
+        assert_eq!(decoded.version, CONTACT_HELLO_VERSION);
+        assert_eq!(decoded.timestamp, 1234567890000);
+        assert_eq!(&decoded.name[..], b"Alice");
+    }
+
+    #[test]
+    fn test_contact_hello_qr() {
+        let hello = ContactHello::new(
+            1234567890000,
+            b"did:offgrid:zTestDid",
+            [1u8; 32],
+            [2u8; 32],
+            b"Bob",
+            None,
+        ).unwrap();
+
+        let qr_data = hello.to_qr_data();
+        assert!(qr_data.starts_with(b"YCH:"));
+
+        let parsed = ContactHello::from_qr_data(&qr_data).unwrap();
+        assert_eq!(&parsed.name[..], b"Bob");
     }
 }

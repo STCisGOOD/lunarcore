@@ -1,5 +1,6 @@
 use heapless::Vec as HeaplessVec;
 
+
 pub const MAX_PACKET_SIZE: usize = 237;
 
 pub const NODE_HINT_SIZE: usize = 2;
@@ -16,6 +17,7 @@ pub const DATA_MAX_PAYLOAD: usize = MAX_PACKET_SIZE - DATA_OVERHEAD;
 
 pub const PADDED_MESSAGE_SIZE: usize = 200;
 
+
 #[derive(Debug, Clone)]
 pub struct UniversalAddress {
 
@@ -30,6 +32,7 @@ pub struct UniversalAddress {
     pub reticulum_hash: [u8; 16],
 }
 
+
 pub struct AddressTranslator;
 
 impl AddressTranslator {
@@ -37,14 +40,18 @@ impl AddressTranslator {
     pub fn from_public_key(public_key: &[u8; 32]) -> UniversalAddress {
         use crate::crypto::sha256::Sha256;
 
+
         let pubkey_hash = Sha256::hash(public_key);
 
+
         let meshcore_addr = ((pubkey_hash[0] as u16) << 8) | (pubkey_hash[1] as u16);
+
 
         let meshtastic_id = ((pubkey_hash[0] as u32) << 24)
             | ((pubkey_hash[1] as u32) << 16)
             | ((pubkey_hash[2] as u32) << 8)
             | (pubkey_hash[3] as u32);
+
 
         let app_hash = Sha256::hash(b"yours.messaging");
         let mut combined = [0u8; 64];
@@ -54,8 +61,10 @@ impl AddressTranslator {
         let mut reticulum_hash = [0u8; 16];
         reticulum_hash.copy_from_slice(&reticulum_full[..16]);
 
+
         let mut did = HeaplessVec::new();
         let _ = did.extend_from_slice(b"did:offgrid:z");
+
 
         UniversalAddress {
             did,
@@ -66,11 +75,13 @@ impl AddressTranslator {
         }
     }
 
+
     pub fn derive_meshcore_address(public_key: &[u8; 32]) -> u16 {
         use crate::crypto::sha256::Sha256;
         let hash = Sha256::hash(public_key);
         ((hash[0] as u16) << 8) | (hash[1] as u16)
     }
+
 
     pub fn derive_meshtastic_id(public_key: &[u8; 32]) -> u32 {
         use crate::crypto::sha256::Sha256;
@@ -80,6 +91,7 @@ impl AddressTranslator {
             | ((hash[2] as u32) << 8)
             | (hash[3] as u32)
     }
+
 
     pub fn derive_reticulum_hash(public_key: &[u8; 32], app_name: &[u8]) -> [u8; 16] {
         use crate::crypto::sha256::Sha256;
@@ -93,6 +105,7 @@ impl AddressTranslator {
         result
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -118,6 +131,7 @@ impl PacketType {
         }
     }
 }
+
 
 #[derive(Debug, Clone)]
 pub struct WirePacket {
@@ -150,24 +164,30 @@ impl WirePacket {
         })
     }
 
+
     pub fn encode(&self) -> HeaplessVec<u8, 237> {
         let mut buf = HeaplessVec::new();
+
 
         let flags = ((self.packet_type as u8) << 6) | (self.hop_count & 0x0F);
         let _ = buf.push(flags);
 
+
         let _ = buf.push((self.next_hop_hint >> 8) as u8);
         let _ = buf.push(self.next_hop_hint as u8);
+
 
         let _ = buf.push((self.session_hint >> 24) as u8);
         let _ = buf.push((self.session_hint >> 16) as u8);
         let _ = buf.push((self.session_hint >> 8) as u8);
         let _ = buf.push(self.session_hint as u8);
 
+
         let _ = buf.extend_from_slice(&self.payload);
 
         buf
     }
+
 
     pub fn decode(data: &[u8]) -> Option<Self> {
         if data.len() < 7 {
@@ -198,6 +218,7 @@ impl WirePacket {
         })
     }
 
+
     pub fn increment_hop(&mut self) -> bool {
         if self.hop_count < 15 {
             self.hop_count += 1;
@@ -207,6 +228,7 @@ impl WirePacket {
         }
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MessagePriority {
@@ -219,6 +241,7 @@ pub enum MessagePriority {
 
     Critical = 3,
 }
+
 
 #[derive(Debug, Clone)]
 pub struct UniversalMessage {
@@ -234,6 +257,7 @@ pub struct UniversalMessage {
     pub timestamp: u64,
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionState {
 
@@ -245,6 +269,7 @@ pub enum ConnectionState {
 
     Error,
 }
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct SignalQuality {
@@ -259,6 +284,7 @@ pub struct SignalQuality {
 impl SignalQuality {
     pub fn new(rssi: i16, snr: i8) -> Self {
 
+
         let rssi_norm = ((rssi.max(-120).min(-50) + 120) as u16 * 100 / 70) as u8;
 
         let snr_norm = ((snr.max(-20).min(10) + 20) as u16 * 100 / 30) as u8;
@@ -268,6 +294,7 @@ impl SignalQuality {
         Self { rssi, snr, quality }
     }
 }
+
 
 #[derive(Debug, Clone)]
 pub struct MeshDeviceInfo {
@@ -283,12 +310,14 @@ pub struct MeshDeviceInfo {
     pub battery_level: u8,
 }
 
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ProtocolSupport {
     pub meshcore: bool,
     pub meshtastic: bool,
     pub reticulum: bool,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportError {
@@ -312,26 +341,36 @@ pub enum TransportError {
     Unknown,
 }
 
+
 pub trait UniversalMeshTransport {
 
     fn connect(&mut self) -> Result<(), TransportError>;
 
+
     fn disconnect(&mut self);
+
 
     fn send_message(&mut self, message: &UniversalMessage) -> Result<[u8; 8], TransportError>;
 
+
     fn poll_message(&mut self) -> Option<UniversalMessage>;
+
 
     fn get_device_info(&self) -> Result<MeshDeviceInfo, TransportError>;
 
+
     fn connection_state(&self) -> ConnectionState;
+
 
     fn signal_quality(&self) -> SignalQuality;
 
+
     fn discover_peers(&mut self, timeout_ms: u32) -> HeaplessVec<UniversalAddress, 16>;
+
 
     fn ping_peer(&mut self, address: &UniversalAddress) -> Result<u32, TransportError>;
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
@@ -350,6 +389,7 @@ impl Protocol {
         }
     }
 
+
     pub fn detect(data: &[u8]) -> Option<Self> {
         if data.len() < 2 {
             return None;
@@ -364,7 +404,9 @@ impl Protocol {
     }
 }
 
+
 const MAX_KNOWN_ADDRESSES: usize = 64;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolAddress {
@@ -372,6 +414,7 @@ pub enum ProtocolAddress {
     Meshtastic(u32),
     Reticulum([u8; 16]),
 }
+
 
 pub struct AddressLookupTable {
 
@@ -391,17 +434,22 @@ impl AddressLookupTable {
         }
     }
 
+
     pub fn register(&mut self, public_key: &[u8; 32]) {
         let addr = AddressTranslator::from_public_key(public_key);
 
+
         let _ = self.meshcore_index.insert(addr.meshcore_addr, *public_key);
 
+
         let _ = self.meshtastic_index.insert(addr.meshtastic_id, *public_key);
+
 
         let mut ret_key = [0u8; 8];
         ret_key.copy_from_slice(&addr.reticulum_hash[..8]);
         let _ = self.reticulum_index.insert(ret_key, *public_key);
     }
+
 
     pub fn unregister(&mut self, public_key: &[u8; 32]) {
         let addr = AddressTranslator::from_public_key(public_key);
@@ -412,19 +460,23 @@ impl AddressLookupTable {
         self.reticulum_index.remove(&ret_key);
     }
 
+
     pub fn lookup_meshcore(&self, addr: u16) -> Option<&[u8; 32]> {
         self.meshcore_index.get(&addr)
     }
 
+
     pub fn lookup_meshtastic(&self, id: u32) -> Option<&[u8; 32]> {
         self.meshtastic_index.get(&id)
     }
+
 
     pub fn lookup_reticulum(&self, hash: &[u8; 16]) -> Option<&[u8; 32]> {
         let mut key = [0u8; 8];
         key.copy_from_slice(&hash[..8]);
         self.reticulum_index.get(&key)
     }
+
 
     pub fn lookup(&self, addr: ProtocolAddress) -> Option<&[u8; 32]> {
         match addr {
@@ -434,9 +486,11 @@ impl AddressLookupTable {
         }
     }
 
+
     pub fn len(&self) -> usize {
         self.meshcore_index.len()
     }
+
 
     pub fn is_empty(&self) -> bool {
         self.meshcore_index.is_empty()
@@ -446,5 +500,76 @@ impl AddressLookupTable {
 impl Default for AddressLookupTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_address_derivation() {
+        let pubkey = [0u8; 32];
+        let addr = AddressTranslator::from_public_key(&pubkey);
+
+
+        let addr2 = AddressTranslator::from_public_key(&pubkey);
+        assert_eq!(addr.meshcore_addr, addr2.meshcore_addr);
+        assert_eq!(addr.meshtastic_id, addr2.meshtastic_id);
+        assert_eq!(addr.reticulum_hash, addr2.reticulum_hash);
+    }
+
+    #[test]
+    fn test_wire_packet_roundtrip() {
+        let packet = WirePacket::new_data(0x1234, 0xDEADBEEF, &[1, 2, 3, 4, 5]).unwrap();
+        let encoded = packet.encode();
+        let decoded = WirePacket::decode(&encoded).unwrap();
+
+        assert_eq!(decoded.packet_type, PacketType::Data);
+        assert_eq!(decoded.next_hop_hint, 0x1234);
+        assert_eq!(decoded.session_hint, 0xDEADBEEF);
+        assert_eq!(&decoded.payload[..], &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_protocol_detection() {
+        assert_eq!(Protocol::detect(&[0xAA, 0x55]), Some(Protocol::MeshCore));
+        assert_eq!(Protocol::detect(&[0x94, 0xC3]), Some(Protocol::Meshtastic));
+        assert_eq!(Protocol::detect(&[0xC0, 0x00]), Some(Protocol::Reticulum));
+        assert_eq!(Protocol::detect(&[0x00, 0x00]), None);
+    }
+
+    #[test]
+    fn test_address_lookup_table() {
+        let mut table = AddressLookupTable::new();
+        let pubkey1 = [1u8; 32];
+        let pubkey2 = [2u8; 32];
+
+
+        table.register(&pubkey1);
+        table.register(&pubkey2);
+        assert_eq!(table.len(), 2);
+
+
+        let addr1 = AddressTranslator::from_public_key(&pubkey1);
+        let addr2 = AddressTranslator::from_public_key(&pubkey2);
+
+
+        assert_eq!(table.lookup_meshcore(addr1.meshcore_addr), Some(&pubkey1));
+        assert_eq!(table.lookup_meshcore(addr2.meshcore_addr), Some(&pubkey2));
+        assert_eq!(table.lookup_meshcore(0xFFFF), None);
+
+
+        assert_eq!(table.lookup_meshtastic(addr1.meshtastic_id), Some(&pubkey1));
+        assert_eq!(table.lookup_meshtastic(addr2.meshtastic_id), Some(&pubkey2));
+
+
+        assert_eq!(table.lookup_reticulum(&addr1.reticulum_hash), Some(&pubkey1));
+
+
+        table.unregister(&pubkey1);
+        assert_eq!(table.len(), 1);
+        assert_eq!(table.lookup_meshcore(addr1.meshcore_addr), None);
     }
 }

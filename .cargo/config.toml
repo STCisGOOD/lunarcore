@@ -1,0 +1,18 @@
+[build]
+target = "xtensa-esp32s3-espidf"
+
+[target.xtensa-esp32s3-espidf]
+linker = "ldproxy"
+runner = "espflash flash --monitor"
+
+[unstable]
+build-std = ["std", "panic_abort"]
+
+[env]
+MCU = "esp32s3"
+LIBCLANG_PATH = "C:/Users/anon/.rustup/toolchains/esp/xtensa-esp32-elf-clang/esp-clang/bin"
+ESP_IDF_VERSION = "v5.2.1"
+ESP_IDF_SDKCONFIG_DEFAULTS = "sdkconfig.defaults"
+ESP_IDF_CMAKE_GENERATOR = "Ninja"
+ESP_IDF_PARTITION_TABLE_PATH = { value = "partitions.csv", relative = true }
+ESP_IDF_CMAKE_ARGS = "-DPARTITION_TABLE_CSV_PATH=partitions.csv"

@@ -1,17 +1,24 @@
 use crate::crypto::sha256::Sha256;
 use crate::crypto::ed25519;
 
+
 pub const OTA_CHUNK_SIZE: usize = 4096;
+
 
 pub const MAX_FIRMWARE_SIZE: usize = 3_584_000;
 
+
 pub const OTA_HEADER_MAGIC: [u8; 4] = [0x4C, 0x55, 0x4E, 0x41];
+
 
 pub const OTA_HEADER_VERSION: u8 = 1;
 
+
 pub const SIGNATURE_SIZE: usize = 64;
 
+
 pub const PUBLIC_KEY_SIZE: usize = 32;
+
 
 #[inline(never)]
 fn ct_key_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
@@ -22,10 +29,12 @@ fn ct_key_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
     diff == 0
 }
 
+
 #[inline]
 fn pack_version(major: u8, minor: u8, patch: u8) -> u32 {
     ((major as u32) << 16) | ((minor as u32) << 8) | (patch as u32)
 }
+
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -57,6 +66,7 @@ pub struct OtaHeader {
 impl OtaHeader {
 
     pub const SIZE: usize = 4 + 1 + 1 + 3 + 3 + 4 + 32 + 64 + 32;
+
 
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < Self::SIZE {
@@ -109,17 +119,21 @@ impl OtaHeader {
         })
     }
 
+
     pub fn version_string(&self) -> [u8; 12] {
         let mut buf = [0u8; 12];
         let mut idx = 0;
+
 
         idx += write_u8_to_buf(self.fw_major, &mut buf[idx..]);
         buf[idx] = b'.';
         idx += 1;
 
+
         idx += write_u8_to_buf(self.fw_minor, &mut buf[idx..]);
         buf[idx] = b'.';
         idx += 1;
+
 
         write_u8_to_buf(self.fw_patch, &mut buf[idx..]);
 
@@ -143,6 +157,7 @@ fn write_u8_to_buf(val: u8, buf: &mut [u8]) -> usize {
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OtaState {
 
@@ -160,6 +175,7 @@ pub enum OtaState {
 
     Error(OtaError),
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OtaError {
@@ -189,6 +205,7 @@ pub enum OtaError {
     NoTrustedKeys,
 }
 
+
 pub struct OtaManager {
 
     state: OtaState,
@@ -213,6 +230,7 @@ pub struct OtaManager {
 
     progress_percent: u8,
 
+
     min_version: u32,
 }
 
@@ -235,6 +253,7 @@ impl OtaManager {
         }
     }
 
+
     pub fn add_trusted_key(&mut self, key: &[u8; PUBLIC_KEY_SIZE]) -> bool {
         if self.trusted_key_count >= 2 {
             return false;
@@ -244,27 +263,33 @@ impl OtaManager {
         true
     }
 
+
     pub fn set_min_version(&mut self, major: u8, minor: u8, patch: u8) {
         self.min_version = pack_version(major, minor, patch);
     }
+
 
     fn is_version_allowed(&self, header: &OtaHeader) -> bool {
         let new_version = pack_version(header.fw_major, header.fw_minor, header.fw_patch);
         new_version >= self.min_version
     }
 
+
     pub fn state(&self) -> OtaState {
         self.state
     }
+
 
     pub fn progress(&self) -> u8 {
         self.progress_percent
     }
 
+
     pub fn begin(&mut self) -> Result<(), OtaError> {
         if self.state != OtaState::Idle {
             return Err(OtaError::Busy);
         }
+
 
         self.header_buf.fill(0);
         self.header_received = 0;
@@ -273,11 +298,13 @@ impl OtaManager {
         self.hasher = Sha256::new();
         self.progress_percent = 0;
 
+
         unsafe {
             let next_partition = esp_idf_sys::esp_ota_get_next_update_partition(core::ptr::null());
             if next_partition.is_null() {
                 return Err(OtaError::PartitionError);
             }
+
 
             let mut handle: esp_idf_sys::esp_ota_handle_t = 0;
             let ret = esp_idf_sys::esp_ota_begin(next_partition, 0, &mut handle);
@@ -292,6 +319,7 @@ impl OtaManager {
         Ok(())
     }
 
+
     pub fn write(&mut self, data: &[u8]) -> Result<usize, OtaError> {
         match self.state {
             OtaState::Idle => Err(OtaError::Aborted),
@@ -301,6 +329,7 @@ impl OtaManager {
             _ => Ok(0),
         }
     }
+
 
     fn write_header(&mut self, data: &[u8]) -> Result<usize, OtaError> {
         let needed = OtaHeader::SIZE - self.header_received;
@@ -315,20 +344,24 @@ impl OtaManager {
             let header = OtaHeader::from_bytes(&self.header_buf)
                 .ok_or(OtaError::InvalidHeader)?;
 
+
             if header.firmware_size as usize > MAX_FIRMWARE_SIZE {
                 self.state = OtaState::Error(OtaError::TooLarge);
                 return Err(OtaError::TooLarge);
             }
+
 
             if self.trusted_key_count == 0 {
                 self.state = OtaState::Error(OtaError::NoTrustedKeys);
                 return Err(OtaError::NoTrustedKeys);
             }
 
+
             if !self.is_version_allowed(&header) {
                 self.state = OtaState::Error(OtaError::DowngradeRejected);
                 return Err(OtaError::DowngradeRejected);
             }
+
 
             if !self.verify_signature(&header) {
                 self.state = OtaState::Error(OtaError::SignatureInvalid);
@@ -338,6 +371,7 @@ impl OtaManager {
             self.header = Some(header);
             self.state = OtaState::Receiving;
 
+
             if to_copy < data.len() {
                 let remaining = &data[to_copy..];
                 return self.write_firmware(remaining).map(|n| to_copy + n);
@@ -346,6 +380,7 @@ impl OtaManager {
 
         Ok(to_copy)
     }
+
 
     fn write_firmware(&mut self, data: &[u8]) -> Result<usize, OtaError> {
         let header = self.header.as_ref().ok_or(OtaError::InvalidHeader)?;
@@ -357,7 +392,9 @@ impl OtaManager {
             return Ok(0);
         }
 
+
         self.hasher.update(&data[..to_write]);
+
 
         unsafe {
             let ret = esp_idf_sys::esp_ota_write(
@@ -374,7 +411,9 @@ impl OtaManager {
 
         self.bytes_received += to_write as u32;
 
+
         self.progress_percent = ((self.bytes_received as u64 * 100) / header.firmware_size as u64) as u8;
+
 
         if self.bytes_received >= header.firmware_size {
             self.state = OtaState::Verifying;
@@ -384,16 +423,20 @@ impl OtaManager {
         Ok(to_write)
     }
 
+
     fn verify_and_finish(&mut self) -> Result<(), OtaError> {
         let header = self.header.as_ref().ok_or(OtaError::InvalidHeader)?;
 
+
         let computed_hash = self.hasher.clone().finalize();
+
 
         if computed_hash != header.firmware_hash {
             self.state = OtaState::Error(OtaError::HashMismatch);
             self.abort();
             return Err(OtaError::HashMismatch);
         }
+
 
         unsafe {
             let ret = esp_idf_sys::esp_ota_end(self.ota_handle);
@@ -415,12 +458,16 @@ impl OtaManager {
         Ok(())
     }
 
+
     fn verify_signature(&self, header: &OtaHeader) -> bool {
+
 
         if self.trusted_key_count == 0 {
 
+
             return false;
         }
+
 
         for i in 0..self.trusted_key_count {
 
@@ -436,13 +483,16 @@ impl OtaManager {
         false
     }
 
+
     pub fn is_enabled(&self) -> bool {
         self.trusted_key_count > 0
     }
 
+
     pub fn trusted_key_count(&self) -> usize {
         self.trusted_key_count
     }
+
 
     pub fn abort(&mut self) {
         if self.ota_handle != 0 {
@@ -454,6 +504,7 @@ impl OtaManager {
         self.state = OtaState::Idle;
     }
 
+
     pub fn confirm() -> Result<(), OtaError> {
         unsafe {
             let ret = esp_idf_sys::esp_ota_mark_app_valid_cancel_rollback();
@@ -464,6 +515,7 @@ impl OtaManager {
         Ok(())
     }
 
+
     pub fn rollback() -> Result<(), OtaError> {
         unsafe {
             let ret = esp_idf_sys::esp_ota_mark_app_invalid_rollback_and_reboot();
@@ -473,6 +525,7 @@ impl OtaManager {
         }
         Ok(())
     }
+
 
     pub fn get_running_partition() -> Option<PartitionInfo> {
         unsafe {
@@ -495,6 +548,7 @@ impl OtaManager {
         }
     }
 
+
     pub fn reboot() -> ! {
         unsafe {
             esp_idf_sys::esp_restart();
@@ -509,6 +563,7 @@ impl Default for OtaManager {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct PartitionInfo {
 
@@ -518,6 +573,7 @@ pub struct PartitionInfo {
 
     pub label: [u8; 16],
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -556,6 +612,7 @@ impl From<u8> for OtaCommand {
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum OtaResponse {
@@ -569,4 +626,117 @@ pub enum OtaResponse {
     Progress = 0x03,
 
     Complete = 0x04,
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ota_header_size() {
+        assert_eq!(OtaHeader::SIZE, 144);
+    }
+
+    #[test]
+    fn test_version_string() {
+        let header = OtaHeader {
+            magic: OTA_HEADER_MAGIC,
+            version: 1,
+            header_size: OtaHeader::SIZE as u8,
+            fw_major: 1,
+            fw_minor: 2,
+            fw_patch: 3,
+            reserved: [0; 3],
+            firmware_size: 0,
+            firmware_hash: [0; 32],
+            signature: [0; 64],
+            public_key: [0; 32],
+        };
+
+        let version = header.version_string();
+        assert_eq!(&version[..5], b"1.2.3");
+    }
+
+    #[test]
+    fn test_pack_version() {
+        assert_eq!(pack_version(1, 2, 3), 0x00010203);
+        assert_eq!(pack_version(0, 0, 0), 0);
+        assert_eq!(pack_version(255, 255, 255), 0x00FFFFFF);
+
+        assert!(pack_version(2, 0, 0) > pack_version(1, 255, 255));
+        assert!(pack_version(1, 1, 0) > pack_version(1, 0, 255));
+        assert!(pack_version(1, 0, 1) > pack_version(1, 0, 0));
+    }
+
+    #[test]
+    fn test_ct_key_eq() {
+        let a = [0x42u8; 32];
+        let b = [0x42u8; 32];
+        let c = [0x43u8; 32];
+
+        assert!(ct_key_eq(&a, &b));
+        assert!(!ct_key_eq(&a, &c));
+
+
+        let mut d = a;
+        d[31] ^= 1;
+        assert!(!ct_key_eq(&a, &d));
+    }
+
+    #[test]
+    fn test_version_allowed() {
+        let mut manager = OtaManager::new();
+
+
+        let header_100 = OtaHeader {
+            magic: OTA_HEADER_MAGIC,
+            version: 1,
+            header_size: OtaHeader::SIZE as u8,
+            fw_major: 1,
+            fw_minor: 0,
+            fw_patch: 0,
+            reserved: [0; 3],
+            firmware_size: 1000,
+            firmware_hash: [0; 32],
+            signature: [0; 64],
+            public_key: [0; 32],
+        };
+        assert!(manager.is_version_allowed(&header_100));
+
+
+        manager.set_min_version(1, 5, 0);
+
+
+        assert!(!manager.is_version_allowed(&header_100));
+
+
+        let mut header_150 = header_100;
+        header_150.fw_minor = 5;
+        assert!(manager.is_version_allowed(&header_150));
+
+
+        let mut header_200 = header_100;
+        header_200.fw_major = 2;
+        assert!(manager.is_version_allowed(&header_200));
+    }
+
+    #[test]
+    fn test_no_trusted_keys_disables_ota() {
+        let manager = OtaManager::new();
+        assert!(!manager.is_enabled());
+        assert_eq!(manager.trusted_key_count(), 0);
+    }
+
+    #[test]
+    fn test_trusted_key_limit() {
+        let mut manager = OtaManager::new();
+        let key = [0x42u8; 32];
+
+        assert!(manager.add_trusted_key(&key));
+        assert!(manager.add_trusted_key(&key));
+
+        assert!(!manager.add_trusted_key(&key));
+        assert_eq!(manager.trusted_key_count(), 2);
+    }
 }

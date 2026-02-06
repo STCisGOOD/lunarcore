@@ -1,8 +1,12 @@
 [package]
 name = "lunarcore"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
+authors = ["Yours App Team"]
+description = "LunarCore - Unified mesh firmware supporting MeshCore, Meshtastic, and RNode/Reticulum protocols"
 license = "MIT"
+repository = "https://github.com/anthropics/lunarcore"
+readme = "README.md"
 
 [dependencies]
 esp-idf-hal = { version = "0.45", features = ["critical-section"] }
@@ -28,8 +32,10 @@ rnode = []
 opt-level = "s"
 lto = false
 codegen-units = 1
+debug = true
 
 [profile.dev]
+debug = true
 opt-level = "z"
 
 [[bin]]

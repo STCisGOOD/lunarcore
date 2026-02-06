@@ -1,5 +1,6 @@
 use heapless::Vec;
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
 
@@ -27,18 +28,23 @@ impl Protocol {
     }
 }
 
+
 pub mod magic {
 
     pub const MESHCORE_SYNC1: u8 = 0xAA;
     pub const MESHCORE_SYNC2: u8 = 0x55;
 
+
     pub const MESHTASTIC_SYNC1: u8 = 0x94;
     pub const MESHTASTIC_SYNC2: u8 = 0xC3;
 
+
     pub const KISS_FEND: u8 = 0xC0;
+
 
     pub const AT_PREFIX: [u8; 2] = [b'A', b'T'];
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DetectState {
@@ -52,7 +58,9 @@ enum DetectState {
     At1,
 }
 
+
 const SYNC_TIMEOUT_BYTES: u16 = 256;
+
 
 pub struct ProtocolDetector {
     state: DetectState,
@@ -88,6 +96,7 @@ impl ProtocolDetector {
         }
     }
 
+
     pub fn reset(&mut self) {
         self.state = DetectState::Idle;
         self.detected = Protocol::Unknown;
@@ -96,10 +105,12 @@ impl ProtocolDetector {
         self.state_bytes = 0;
     }
 
+
     pub fn soft_reset(&mut self) {
         self.state = DetectState::Idle;
         self.state_bytes = 0;
     }
+
 
     pub fn force_protocol(&mut self, protocol: Protocol) {
         self.detected = protocol;
@@ -107,19 +118,23 @@ impl ProtocolDetector {
 
     }
 
+
     pub fn protocol(&self) -> Protocol {
         self.detected
     }
 
+
     pub fn is_locked(&self) -> bool {
         self.lock_count >= self.lock_threshold
     }
+
 
     pub fn confirm_frame(&mut self) {
         if self.lock_count < 255 {
             self.lock_count += 1;
         }
     }
+
 
     pub fn error_frame(&mut self) {
         if self.lock_count > 0 {
@@ -131,6 +146,7 @@ impl ProtocolDetector {
         }
     }
 
+
     fn check_timeout(&mut self) {
         if self.state != DetectState::Idle && self.state_bytes > SYNC_TIMEOUT_BYTES {
 
@@ -139,11 +155,14 @@ impl ProtocolDetector {
         }
     }
 
+
     pub fn feed(&mut self, byte: u8) -> Option<Protocol> {
         self.bytes_seen += 1;
         self.state_bytes += 1;
 
+
         self.check_timeout();
+
 
         if self.is_locked() {
             return Some(self.detected);
@@ -161,6 +180,7 @@ impl ProtocolDetector {
                         self.state = DetectState::Meshtastic1;
                     }
                     magic::KISS_FEND => {
+
 
                         if self.detected == Protocol::Unknown || self.detected == Protocol::RNode {
                             self.detected = Protocol::RNode;
@@ -209,6 +229,7 @@ impl ProtocolDetector {
             }
         }
 
+
         if self.state != prev_state {
             self.state_bytes = 0;
         }
@@ -217,7 +238,9 @@ impl ProtocolDetector {
     }
 }
 
+
 pub const MAX_TRANSPORTS: usize = 3;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportType {
@@ -225,6 +248,7 @@ pub enum TransportType {
     Ble,
     WiFi,
 }
+
 
 pub struct TransportState {
     pub transport: TransportType,
@@ -241,6 +265,7 @@ impl TransportState {
         }
     }
 }
+
 
 pub struct ProtocolRouter {
 
@@ -267,6 +292,7 @@ impl ProtocolRouter {
         }
     }
 
+
     pub fn transport(&mut self, t: TransportType) -> &mut TransportState {
         match t {
             TransportType::UsbSerial => &mut self.transports[0],
@@ -274,6 +300,7 @@ impl ProtocolRouter {
             TransportType::WiFi => &mut self.transports[2],
         }
     }
+
 
     pub fn transport_ref(&self, t: TransportType) -> &TransportState {
         match t {
@@ -283,21 +310,26 @@ impl ProtocolRouter {
         }
     }
 
+
     pub fn lora_protocol(&self) -> Protocol {
         self.lora_protocol
     }
+
 
     pub fn set_lora_protocol(&mut self, protocol: Protocol) {
         self.lora_protocol = protocol;
     }
 
+
     pub fn is_lora_shared(&self) -> bool {
         self.lora_shared
     }
 
+
     pub fn priority_transport(&self) -> Option<TransportType> {
         self.priority_transport
     }
+
 
     pub fn release_lora_control(&mut self, transport: TransportType) {
         if self.priority_transport == Some(transport) {
@@ -310,15 +342,18 @@ impl ProtocolRouter {
         state.active = false;
     }
 
+
     fn can_claim_lora(&self, transport: TransportType, protocol: Protocol) -> bool {
 
         if self.priority_transport.is_none() {
             return true;
         }
 
+
         if self.priority_transport == Some(transport) {
             return true;
         }
+
 
         if self.lora_protocol == protocol {
             return true;
@@ -326,6 +361,7 @@ impl ProtocolRouter {
 
         false
     }
+
 
     pub fn route_incoming(&mut self, transport: TransportType, byte: u8) -> Protocol {
 
@@ -349,6 +385,7 @@ impl ProtocolRouter {
                     self.lora_protocol = protocol;
                 }
 
+
                 if self.priority_transport.is_none() && self.transports[idx].detector.is_locked() {
                     self.priority_transport = Some(transport);
                 }
@@ -359,19 +396,23 @@ impl ProtocolRouter {
         }
     }
 
+
     pub fn resolve_conflict(&mut self, transport: TransportType, new_protocol: Protocol) -> bool {
 
         if new_protocol == Protocol::AtCommand {
             return true;
         }
 
+
         if self.priority_transport.is_none() {
             return true;
         }
 
+
         if self.priority_transport == Some(transport) {
             return true;
         }
+
 
         if self.lora_protocol != new_protocol && self.lora_protocol != Protocol::Unknown {
             return false;
@@ -379,6 +420,7 @@ impl ProtocolRouter {
 
         true
     }
+
 
     pub fn status(&self) -> [(TransportType, Protocol, bool); MAX_TRANSPORTS] {
         [
@@ -395,6 +437,7 @@ impl Default for ProtocolRouter {
     }
 }
 
+
 pub struct LoRaPacket {
     pub protocol: Protocol,
     pub data: Vec<u8, 256>,
@@ -404,12 +447,15 @@ pub struct LoRaPacket {
 
 impl LoRaPacket {
 
+
     pub fn detect_protocol(data: &[u8]) -> Protocol {
         if data.len() < 4 {
             return Protocol::Unknown;
         }
 
+
         if data.len() >= 20 {
+
 
             let channel_hash = data[3];
 
@@ -422,6 +468,7 @@ impl LoRaPacket {
             }
         }
 
+
         if data.len() >= 9 {
             let flags = data[8];
 
@@ -433,13 +480,16 @@ impl LoRaPacket {
             }
         }
 
+
         if data.len() >= 18 {
+
 
             let context = data[16];
             let header_type = (context >> 6) & 0x03;
             let propagation_type = (context >> 4) & 0x03;
 
             if header_type <= 3 && propagation_type <= 3 {
+
 
                 let zeros = data[..16].iter().filter(|&&b| b == 0).count();
                 if zeros < 8 {
@@ -451,6 +501,7 @@ impl LoRaPacket {
         Protocol::Unknown
     }
 }
+
 
 #[derive(Clone)]
 pub struct UnifiedPacket {
@@ -490,5 +541,50 @@ impl UnifiedPacket {
 impl Default for UnifiedPacket {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_meshcore_detection() {
+        let mut detector = ProtocolDetector::new();
+        assert_eq!(detector.protocol(), Protocol::Unknown);
+
+        detector.feed(0xAA);
+        assert_eq!(detector.protocol(), Protocol::Unknown);
+
+        let result = detector.feed(0x55);
+        assert_eq!(result, Some(Protocol::MeshCore));
+        assert_eq!(detector.protocol(), Protocol::MeshCore);
+    }
+
+    #[test]
+    fn test_meshtastic_detection() {
+        let mut detector = ProtocolDetector::new();
+
+        detector.feed(0x94);
+        let result = detector.feed(0xC3);
+        assert_eq!(result, Some(Protocol::Meshtastic));
+    }
+
+    #[test]
+    fn test_kiss_detection() {
+        let mut detector = ProtocolDetector::new();
+
+        let result = detector.feed(0xC0);
+        assert_eq!(result, Some(Protocol::RNode));
+    }
+
+    #[test]
+    fn test_at_detection() {
+        let mut detector = ProtocolDetector::new();
+
+        detector.feed(b'A');
+        let result = detector.feed(b'T');
+        assert_eq!(result, Some(Protocol::AtCommand));
     }
 }

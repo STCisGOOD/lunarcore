@@ -1,13 +1,18 @@
 use heapless::String;
 
+
 pub const SSD1306_ADDR: u8 = 0x3C;
+
 
 pub const DISPLAY_WIDTH: usize = 128;
 pub const DISPLAY_HEIGHT: usize = 64;
 
+
 pub const DISPLAY_PAGES: usize = DISPLAY_HEIGHT / 8;
 
+
 pub const FRAMEBUFFER_SIZE: usize = DISPLAY_WIDTH * DISPLAY_PAGES;
+
 
 const CMD_SET_CONTRAST: u8 = 0x81;
 const CMD_DISPLAY_ALL_ON_RESUME: u8 = 0xA4;
@@ -34,9 +39,11 @@ const CMD_SEG_REMAP: u8 = 0xA0;
 const CMD_CHARGE_PUMP: u8 = 0x8D;
 const CMD_DEACTIVATE_SCROLL: u8 = 0x2E;
 
+
 const CONTROL_CMD_SINGLE: u8 = 0x80;
 const CONTROL_CMD_STREAM: u8 = 0x00;
 const CONTROL_DATA_STREAM: u8 = 0x40;
+
 
 static FONT_5X7: [u8; 320] = [
 
@@ -169,6 +176,7 @@ static FONT_5X7: [u8; 320] = [
     0x40, 0x40, 0x40, 0x40, 0x40,
 ];
 
+
 pub struct Display<I2C> {
 
     i2c: I2C,
@@ -181,6 +189,7 @@ pub struct Display<I2C> {
 
     contrast: u8,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayError {
@@ -206,6 +215,7 @@ where
             contrast: 0x7F,
         }
     }
+
 
     pub fn init(&mut self) -> Result<(), DisplayError> {
 
@@ -240,10 +250,12 @@ where
         Ok(())
     }
 
+
     fn write_command(&mut self, cmd: u8) -> Result<(), DisplayError> {
         let buf = [CONTROL_CMD_SINGLE, cmd];
         self.i2c.write(SSD1306_ADDR, &buf).map_err(|_| DisplayError::I2cError)
     }
+
 
     fn write_commands(&mut self, cmds: &[u8]) -> Result<(), DisplayError> {
         for &cmd in cmds {
@@ -252,11 +264,13 @@ where
         Ok(())
     }
 
+
     pub fn flush(&mut self) -> Result<(), DisplayError> {
 
         self.write_commands(&[CMD_COLUMN_ADDR, 0, (DISPLAY_WIDTH - 1) as u8])?;
 
         self.write_commands(&[CMD_PAGE_ADDR, 0, (DISPLAY_PAGES - 1) as u8])?;
+
 
         const CHUNK_SIZE: usize = 128;
         for chunk in self.framebuffer.chunks(CHUNK_SIZE) {
@@ -270,13 +284,16 @@ where
         Ok(())
     }
 
+
     pub fn clear(&mut self) {
         self.framebuffer.fill(0);
     }
 
+
     pub fn fill(&mut self) {
         self.framebuffer.fill(0xFF);
     }
+
 
     pub fn set_pixel(&mut self, x: usize, y: usize, on: bool) {
         if x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT {
@@ -294,6 +311,7 @@ where
         }
     }
 
+
     pub fn get_pixel(&self, x: usize, y: usize) -> bool {
         if x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT {
             return false;
@@ -306,17 +324,20 @@ where
         (self.framebuffer[idx] >> bit) & 1 != 0
     }
 
+
     pub fn draw_hline(&mut self, x: usize, y: usize, width: usize, on: bool) {
         for dx in 0..width {
             self.set_pixel(x + dx, y, on);
         }
     }
 
+
     pub fn draw_vline(&mut self, x: usize, y: usize, height: usize, on: bool) {
         for dy in 0..height {
             self.set_pixel(x, y + dy, on);
         }
     }
+
 
     pub fn draw_rect(&mut self, x: usize, y: usize, width: usize, height: usize, on: bool) {
         self.draw_hline(x, y, width, on);
@@ -325,11 +346,13 @@ where
         self.draw_vline(x + width - 1, y, height, on);
     }
 
+
     pub fn fill_rect(&mut self, x: usize, y: usize, width: usize, height: usize, on: bool) {
         for dy in 0..height {
             self.draw_hline(x, y + dy, width, on);
         }
     }
+
 
     pub fn draw_char(&mut self, x: usize, y: usize, c: char) -> usize {
         let c = c as u8;
@@ -342,6 +365,7 @@ where
             return 0;
         }
 
+
         for col in 0..5 {
             let bits = FONT_5X7[idx + col];
             for row in 0..7 {
@@ -353,6 +377,7 @@ where
         6
     }
 
+
     pub fn draw_text(&mut self, x: usize, y: usize, text: &str) {
         let mut cx = x;
         for c in text.chars() {
@@ -362,6 +387,7 @@ where
             cx += self.draw_char(cx, y, c);
         }
     }
+
 
     pub fn draw_text_centered(&mut self, y: usize, text: &str) {
         let width = text.len() * 6;
@@ -373,10 +399,12 @@ where
         self.draw_text(x, y, text);
     }
 
+
     pub fn set_contrast(&mut self, contrast: u8) -> Result<(), DisplayError> {
         self.contrast = contrast;
         self.write_commands(&[CMD_SET_CONTRAST, contrast])
     }
+
 
     pub fn power_on(&mut self) -> Result<(), DisplayError> {
         self.write_command(CMD_DISPLAY_ON)?;
@@ -384,11 +412,13 @@ where
         Ok(())
     }
 
+
     pub fn power_off(&mut self) -> Result<(), DisplayError> {
         self.write_command(CMD_DISPLAY_OFF)?;
         self.power_on = false;
         Ok(())
     }
+
 
     pub fn invert(&mut self, invert: bool) -> Result<(), DisplayError> {
         self.inverted = invert;
@@ -399,22 +429,27 @@ where
         }
     }
 
+
     pub fn is_on(&self) -> bool {
         self.power_on
     }
 
+
     pub fn framebuffer(&self) -> &[u8; FRAMEBUFFER_SIZE] {
         &self.framebuffer
     }
+
 
     pub fn framebuffer_mut(&mut self) -> &mut [u8; FRAMEBUFFER_SIZE] {
         &mut self.framebuffer
     }
 }
 
+
 pub struct StatusDisplay<I2C> {
     display: Display<I2C>,
 }
+
 
 pub struct StatusContent {
 
@@ -431,6 +466,20 @@ pub struct StatusContent {
     pub rssi: i16,
 
     pub connected: bool,
+
+    pub irq_status: u16,
+
+    pub last_irq: u16,
+
+    pub dio1_count: u32,
+
+    pub chip_mode: u8,
+
+    pub device_errors: u16,
+
+    pub repeater_active: bool,
+
+    pub relay_count: u32,
 }
 
 impl<I2C, E> StatusDisplay<I2C>
@@ -444,39 +493,51 @@ where
         }
     }
 
+
     pub fn init(&mut self) -> Result<(), DisplayError> {
         self.display.init()
     }
 
+
     pub fn show_splash(&mut self) -> Result<(), DisplayError> {
         self.display.clear();
 
+
         self.display.draw_rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, true);
+
 
         self.display.draw_text_centered(8, "LunarCore");
         self.display.draw_text_centered(18, "v1.0.0");
 
+
         self.display.draw_text_centered(32, "Unified Mesh");
         self.display.draw_text_centered(42, "Bridge Firmware");
+
 
         self.display.draw_text_centered(54, "MC | MT | RN");
 
         self.display.flush()
     }
 
+
     pub fn show_status(&mut self, status: &StatusContent) -> Result<(), DisplayError> {
         self.display.clear();
 
+
         self.display.draw_text(0, 0, status.protocol);
+
 
         let batt_str = format_battery(status.battery_pct);
         self.display.draw_text(DISPLAY_WIDTH - 24, 0, &batt_str);
 
+
         self.display.draw_hline(0, 9, DISPLAY_WIDTH, true);
+
 
         self.display.draw_text(0, 12, "ID:");
         let id_str = format_hex32(status.node_id);
         self.display.draw_text(24, 12, &id_str);
+
 
         self.display.draw_text(0, 22, "RX:");
         let rx_str = format_u32(status.rx_count);
@@ -486,24 +547,50 @@ where
         let tx_str = format_u32(status.tx_count);
         self.display.draw_text(88, 22, &tx_str);
 
+
         self.display.draw_text(0, 32, "RSSI:");
         let rssi_str = format_i16(status.rssi);
         self.display.draw_text(36, 32, &rssi_str);
         self.display.draw_text(72, 32, "dBm");
 
+
         self.display.draw_text(0, 44, "Status:");
         if status.connected {
             self.display.draw_text(48, 44, "CONNECTED");
+        } else if status.repeater_active {
+
+            self.display.draw_text(48, 44, "RELAY:");
+            let count_str = format_u32(status.relay_count);
+            self.display.draw_text(84, 44, &count_str);
         } else {
             self.display.draw_text(48, 44, "WAITING");
         }
 
-        self.display.draw_hline(0, 54, DISPLAY_WIDTH, true);
 
-        self.display.draw_text_centered(56, "github.com/yours");
+        self.display.draw_hline(0, 46, DISPLAY_WIDTH, true);
+
+
+        self.display.draw_text(0, 48, "M:");
+        let mode_str = chip_mode_str(status.chip_mode);
+        self.display.draw_text(12, 48, mode_str);
+        self.display.draw_text(48, 48, "E:");
+        let err_str = format_hex16(status.device_errors);
+        self.display.draw_text(60, 48, &err_str);
+        self.display.draw_text(96, 48, "D1:");
+        let d1_str = format_u32(status.dio1_count);
+        self.display.draw_text(114, 48, &d1_str);
+
+
+        self.display.draw_text(0, 56, "IRQ:");
+        let irq_str = format_hex16(status.irq_status);
+        self.display.draw_text(24, 56, &irq_str);
+        self.display.draw_text(60, 56, "LAST:");
+        let last_str = format_hex16(status.last_irq);
+        self.display.draw_text(90, 56, &last_str);
 
         self.display.flush()
     }
+
 
     pub fn show_error(&mut self, msg: &str) -> Result<(), DisplayError> {
         self.display.clear();
@@ -515,6 +602,7 @@ where
         self.display.flush()
     }
 
+
     pub fn show_message(&mut self, line1: &str, line2: &str) -> Result<(), DisplayError> {
         self.display.clear();
 
@@ -524,18 +612,22 @@ where
         self.display.flush()
     }
 
+
     pub fn power_off(&mut self) -> Result<(), DisplayError> {
         self.display.power_off()
     }
+
 
     pub fn power_on(&mut self) -> Result<(), DisplayError> {
         self.display.power_on()
     }
 
+
     pub fn display(&mut self) -> &mut Display<I2C> {
         &mut self.display
     }
 }
+
 
 fn format_battery(pct: u8) -> String<4> {
     let mut s = String::new();
@@ -555,6 +647,16 @@ fn format_hex32(val: u32) -> String<8> {
     const HEX: &[u8] = b"0123456789ABCDEF";
     let mut s = String::new();
     for i in (0..8).rev() {
+        let nibble = ((val >> (i * 4)) & 0xF) as usize;
+        let _ = s.push(HEX[nibble] as char);
+    }
+    s
+}
+
+fn format_hex16(val: u16) -> String<4> {
+    const HEX: &[u8] = b"0123456789ABCDEF";
+    let mut s = String::new();
+    for i in (0..4).rev() {
         let nibble = ((val >> (i * 4)) & 0xF) as usize;
         let _ = s.push(HEX[nibble] as char);
     }
@@ -597,6 +699,19 @@ fn format_i16(val: i16) -> String<6> {
     }
     s
 }
+
+
+fn chip_mode_str(mode: u8) -> &'static str {
+    match mode {
+        2 => "STBY_RC",
+        3 => "STBY_X",
+        4 => "FS",
+        5 => "RX",
+        6 => "TX",
+        _ => "???",
+    }
+}
+
 
 static MOON_PHASES: [[u8; 72]; 8] = [
 
@@ -673,6 +788,7 @@ static MOON_PHASES: [[u8; 72]; 8] = [
     ],
 ];
 
+
 static YOURS_FACE: [u8; 128] = [
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xE0,0xF0,0xF8,0xF8,0xF8,0xFC,0xFC,0xFC,0xFC,0xFC,0xFC,0xF8,0xF8,0xF0,0xF0,0xE0,0xE0,0xE0,0xC0,0x80,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xC0,0xFF,0xFF,0xFF,0xFF,0xFF,0xEF,0xE7,0xE7,0xE7,0xC7,0xC7,0xC7,0xC7,0xC7,0xFF,0xFF,0xFF,0xFF,0x0F,0x07,0x03,0x00,0x00,0x00,
@@ -700,6 +816,7 @@ where
         }
     }
 
+
     pub fn draw_bitmap_32x32(&mut self, x: usize, y: usize, bitmap: &[u8; 128]) {
         for col in 0..32 {
             for page in 0..4 {
@@ -721,17 +838,21 @@ where
     I2C: embedded_hal::i2c::I2c<Error = E>,
 {
 
+
     pub fn boot_animation(&mut self, delay_fn: &mut dyn FnMut(u32)) -> Result<(), DisplayError> {
 
         for cycle in 0..2 {
             for phase in 0..8 {
                 self.display.clear();
 
+
                 let moon_x = (DISPLAY_WIDTH - 24) / 2;
                 let moon_y = 8;
                 self.display.draw_bitmap_24x24(moon_x, moon_y, &MOON_PHASES[phase]);
 
+
                 self.display.draw_text_centered(40, "LUNARCORE");
+
 
                 let dots_x = (DISPLAY_WIDTH - 8 * 4) / 2;
                 for i in 0..8 {
@@ -741,10 +862,12 @@ where
 
                 self.display.flush()?;
 
+
                 let delay = if cycle == 1 { 120 } else { 80 };
                 delay_fn(delay);
             }
         }
+
 
         self.show_branding()?;
         delay_fn(1500);
@@ -752,12 +875,15 @@ where
         Ok(())
     }
 
+
     pub fn show_branding(&mut self) -> Result<(), DisplayError> {
         self.display.clear();
+
 
         let logo_x = (DISPLAY_WIDTH - 32) / 2;
         let logo_y = 4;
         self.display.draw_bitmap_32x32(logo_x, logo_y, &YOURS_FACE);
+
 
         self.display.draw_text_centered(42, "[ YOURS ]");
         self.display.draw_text_centered(52, "x [ LUNARCORE ]");
@@ -765,12 +891,16 @@ where
         self.display.flush()
     }
 
+
     pub fn show_init_progress(&mut self, step: &str, progress: u8) -> Result<(), DisplayError> {
         self.display.clear();
 
+
         self.display.draw_text_centered(8, "INITIALIZING");
 
+
         self.display.draw_text_centered(24, step);
+
 
         let bar_width = 100;
         let bar_x = (DISPLAY_WIDTH - bar_width) / 2;
@@ -780,9 +910,46 @@ where
         self.display.draw_rect(bar_x, bar_y, bar_width, 8, true);
         self.display.fill_rect(bar_x + 1, bar_y + 1, filled.saturating_sub(2), 6, true);
 
+
         let pct_str = format_battery(progress);
         self.display.draw_text_centered(52, &pct_str);
 
         self.display.flush()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_battery() {
+        assert_eq!(&format_battery(0)[..], "0%");
+        assert_eq!(&format_battery(5)[..], "5%");
+        assert_eq!(&format_battery(50)[..], "50%");
+        assert_eq!(&format_battery(100)[..], "100%");
+    }
+
+    #[test]
+    fn test_format_hex32() {
+        assert_eq!(&format_hex32(0)[..], "00000000");
+        assert_eq!(&format_hex32(0xDEADBEEF)[..], "DEADBEEF");
+        assert_eq!(&format_hex32(0x12345678)[..], "12345678");
+    }
+
+    #[test]
+    fn test_format_u32() {
+        assert_eq!(&format_u32(0)[..], "0");
+        assert_eq!(&format_u32(123)[..], "123");
+        assert_eq!(&format_u32(999999)[..], "999999");
+    }
+
+    #[test]
+    fn test_format_i16() {
+        assert_eq!(&format_i16(0)[..], "0");
+        assert_eq!(&format_i16(100)[..], "100");
+        assert_eq!(&format_i16(-50)[..], "-50");
+        assert_eq!(&format_i16(-128)[..], "-128");
     }
 }

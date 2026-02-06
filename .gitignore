@@ -1,0 +1,13 @@
+/target/
+/.embuild/
+/build/
+sdkconfig
+sdkconfig.old
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.log

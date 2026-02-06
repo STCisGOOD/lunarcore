@@ -1,6 +1,7 @@
 #[inline(never)]
 fn sbox_ct(input: u8) -> u8 {
 
+
     let x = input;
     let x2 = gf_square(x);
     let x4 = gf_square(x2);
@@ -10,6 +11,7 @@ fn sbox_ct(input: u8) -> u8 {
     let x64 = gf_square(x32);
     let x128 = gf_square(x64);
 
+
     let inv = gf_mul_ct(x2, x4);
     let inv = gf_mul_ct(inv, x8);
     let inv = gf_mul_ct(inv, x16);
@@ -17,13 +19,16 @@ fn sbox_ct(input: u8) -> u8 {
     let inv = gf_mul_ct(inv, x64);
     let inv = gf_mul_ct(inv, x128);
 
+
     affine_transform(inv)
 }
+
 
 #[inline(never)]
 fn inv_sbox_ct(input: u8) -> u8 {
 
     let x = inv_affine_transform(input);
+
 
     let x2 = gf_square(x);
     let x4 = gf_square(x2);
@@ -41,53 +46,66 @@ fn inv_sbox_ct(input: u8) -> u8 {
     gf_mul_ct(inv, x128)
 }
 
+
 #[inline]
 fn gf_square(x: u8) -> u8 {
     gf_mul_ct(x, x)
 }
+
 
 #[inline]
 fn gf_mul_ct(a: u8, b: u8) -> u8 {
     let mut result: u8 = 0;
     let mut aa = a;
 
+
     result ^= aa & (((b & 0x01) as i8).wrapping_neg() as u8);
     let mask = ((aa >> 7) as i8).wrapping_neg() as u8;
     aa = (aa << 1) ^ (0x1b & mask);
+
 
     result ^= aa & ((((b >> 1) & 0x01) as i8).wrapping_neg() as u8);
     let mask = ((aa >> 7) as i8).wrapping_neg() as u8;
     aa = (aa << 1) ^ (0x1b & mask);
 
+
     result ^= aa & ((((b >> 2) & 0x01) as i8).wrapping_neg() as u8);
     let mask = ((aa >> 7) as i8).wrapping_neg() as u8;
     aa = (aa << 1) ^ (0x1b & mask);
+
 
     result ^= aa & ((((b >> 3) & 0x01) as i8).wrapping_neg() as u8);
     let mask = ((aa >> 7) as i8).wrapping_neg() as u8;
     aa = (aa << 1) ^ (0x1b & mask);
 
+
     result ^= aa & ((((b >> 4) & 0x01) as i8).wrapping_neg() as u8);
     let mask = ((aa >> 7) as i8).wrapping_neg() as u8;
     aa = (aa << 1) ^ (0x1b & mask);
+
 
     result ^= aa & ((((b >> 5) & 0x01) as i8).wrapping_neg() as u8);
     let mask = ((aa >> 7) as i8).wrapping_neg() as u8;
     aa = (aa << 1) ^ (0x1b & mask);
 
+
     result ^= aa & ((((b >> 6) & 0x01) as i8).wrapping_neg() as u8);
     let mask = ((aa >> 7) as i8).wrapping_neg() as u8;
     aa = (aa << 1) ^ (0x1b & mask);
+
 
     result ^= aa & ((((b >> 7) & 0x01) as i8).wrapping_neg() as u8);
 
     result
 }
 
+
 #[inline]
 fn affine_transform(x: u8) -> u8 {
 
+
     let mut result = 0u8;
+
 
     result |= (parity(x & 0b11110001) ^ 1) << 0;
     result |= (parity(x & 0b11100011) ^ 1) << 1;
@@ -101,10 +119,12 @@ fn affine_transform(x: u8) -> u8 {
     result
 }
 
+
 #[inline]
 fn inv_affine_transform(x: u8) -> u8 {
 
     let y = x ^ 0x63;
+
 
     let mut result = 0u8;
 
@@ -120,6 +140,7 @@ fn inv_affine_transform(x: u8) -> u8 {
     result
 }
 
+
 #[inline]
 fn parity(mut x: u8) -> u8 {
     x ^= x >> 4;
@@ -127,6 +148,7 @@ fn parity(mut x: u8) -> u8 {
     x ^= x >> 1;
     x & 1
 }
+
 
 const SBOX: [u8; 256] = [
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -147,6 +169,7 @@ const SBOX: [u8; 256] = [
     0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16,
 ];
 
+
 const INV_SBOX: [u8; 256] = [
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
     0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
@@ -166,9 +189,12 @@ const INV_SBOX: [u8; 256] = [
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 ];
 
+
 const RCON: [u8; 11] = [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
 
+
 pub const BLOCK_SIZE: usize = 16;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AesMode {
@@ -180,10 +206,12 @@ pub enum AesMode {
     Cbc,
 }
 
+
 pub struct Aes128 {
 
     round_keys: [u8; 176],
 }
+
 
 pub struct Aes256 {
 
@@ -206,6 +234,7 @@ impl Aes128 {
         cipher.key_expansion(key);
         cipher
     }
+
 
     fn key_expansion(&mut self, key: &[u8; 16]) {
 
@@ -235,6 +264,7 @@ impl Aes128 {
                 rcon_idx += 1;
             }
 
+
             for j in 0..4 {
                 self.round_keys[i + j] = self.round_keys[i - 16 + j] ^ temp[j];
             }
@@ -242,10 +272,13 @@ impl Aes128 {
         }
     }
 
+
     pub fn encrypt_block(&self, block: &mut [u8; 16]) {
         let mut state = *block;
 
+
         Self::add_round_key(&mut state, &self.round_keys[0..16]);
+
 
         for round in 1..10 {
             Self::sub_bytes(&mut state);
@@ -254,6 +287,7 @@ impl Aes128 {
             Self::add_round_key(&mut state, &self.round_keys[round * 16..(round + 1) * 16]);
         }
 
+
         Self::sub_bytes(&mut state);
         Self::shift_rows(&mut state);
         Self::add_round_key(&mut state, &self.round_keys[160..176]);
@@ -261,10 +295,13 @@ impl Aes128 {
         *block = state;
     }
 
+
     pub fn decrypt_block(&self, block: &mut [u8; 16]) {
         let mut state = *block;
 
+
         Self::add_round_key(&mut state, &self.round_keys[160..176]);
+
 
         for round in (1..10).rev() {
             Self::inv_shift_rows(&mut state);
@@ -273,12 +310,14 @@ impl Aes128 {
             Self::inv_mix_columns(&mut state);
         }
 
+
         Self::inv_shift_rows(&mut state);
         Self::inv_sub_bytes(&mut state);
         Self::add_round_key(&mut state, &self.round_keys[0..16]);
 
         *block = state;
     }
+
 
     pub fn encrypt_ctr(&self, nonce: &[u8; 16], data: &mut [u8]) {
         let mut counter = *nonce;
@@ -289,17 +328,21 @@ impl Aes128 {
             keystream = counter;
             self.encrypt_block(&mut keystream);
 
+
             for (i, byte) in chunk.iter_mut().enumerate() {
                 *byte ^= keystream[i];
             }
+
 
             Self::increment_counter(&mut counter);
         }
     }
 
+
     pub fn decrypt_ctr(&self, nonce: &[u8; 16], data: &mut [u8]) {
         self.encrypt_ctr(nonce, data);
     }
+
 
     pub fn encrypt_cbc(&self, iv: &[u8; 16], data: &mut [u8]) {
         assert!(data.len() % 16 == 0, "Data must be multiple of block size");
@@ -312,14 +355,17 @@ impl Aes128 {
                 *byte ^= prev[i];
             }
 
+
             let mut block = [0u8; 16];
             block.copy_from_slice(chunk);
             self.encrypt_block(&mut block);
             chunk.copy_from_slice(&block);
 
+
             prev.copy_from_slice(chunk);
         }
     }
+
 
     pub fn decrypt_cbc(&self, iv: &[u8; 16], data: &mut [u8]) {
         assert!(data.len() % 16 == 0, "Data must be multiple of block size");
@@ -331,18 +377,22 @@ impl Aes128 {
             let mut saved = [0u8; 16];
             saved.copy_from_slice(chunk);
 
+
             let mut block = [0u8; 16];
             block.copy_from_slice(chunk);
             self.decrypt_block(&mut block);
+
 
             for (i, byte) in block.iter_mut().enumerate() {
                 *byte ^= prev[i];
             }
             chunk.copy_from_slice(&block);
 
+
             prev = saved;
         }
     }
+
 
     #[inline]
     fn sub_bytes(state: &mut [u8; 16]) {
@@ -351,6 +401,7 @@ impl Aes128 {
         }
     }
 
+
     #[inline]
     fn inv_sub_bytes(state: &mut [u8; 16]) {
         for byte in state.iter_mut() {
@@ -358,8 +409,10 @@ impl Aes128 {
         }
     }
 
+
     #[inline]
     fn shift_rows(state: &mut [u8; 16]) {
+
 
         let temp = state[1];
         state[1] = state[5];
@@ -367,12 +420,14 @@ impl Aes128 {
         state[9] = state[13];
         state[13] = temp;
 
+
         let temp0 = state[2];
         let temp1 = state[6];
         state[2] = state[10];
         state[6] = state[14];
         state[10] = temp0;
         state[14] = temp1;
+
 
         let temp = state[15];
         state[15] = state[11];
@@ -381,14 +436,17 @@ impl Aes128 {
         state[3] = temp;
     }
 
+
     #[inline]
     fn inv_shift_rows(state: &mut [u8; 16]) {
+
 
         let temp = state[13];
         state[13] = state[9];
         state[9] = state[5];
         state[5] = state[1];
         state[1] = temp;
+
 
         let temp0 = state[2];
         let temp1 = state[6];
@@ -397,12 +455,14 @@ impl Aes128 {
         state[10] = temp0;
         state[14] = temp1;
 
+
         let temp = state[3];
         state[3] = state[7];
         state[7] = state[11];
         state[11] = state[15];
         state[15] = temp;
     }
+
 
     #[inline]
     fn mix_columns(state: &mut [u8; 16]) {
@@ -420,6 +480,7 @@ impl Aes128 {
         }
     }
 
+
     #[inline]
     fn inv_mix_columns(state: &mut [u8; 16]) {
         for col in 0..4 {
@@ -436,12 +497,14 @@ impl Aes128 {
         }
     }
 
+
     #[inline]
     fn add_round_key(state: &mut [u8; 16], round_key: &[u8]) {
         for (i, byte) in state.iter_mut().enumerate() {
             *byte ^= round_key[i];
         }
     }
+
 
     #[inline]
     fn increment_counter(counter: &mut [u8; 16]) {
@@ -470,6 +533,7 @@ impl Aes256 {
         cipher.key_expansion(key);
         cipher
     }
+
 
     fn key_expansion(&mut self, key: &[u8; 32]) {
 
@@ -510,10 +574,13 @@ impl Aes256 {
         }
     }
 
+
     pub fn encrypt_block(&self, block: &mut [u8; 16]) {
         let mut state = *block;
 
+
         add_round_key_256(&mut state, &self.round_keys[0..16]);
+
 
         for round in 1..14 {
             sub_bytes_256(&mut state);
@@ -522,12 +589,14 @@ impl Aes256 {
             add_round_key_256(&mut state, &self.round_keys[round * 16..(round + 1) * 16]);
         }
 
+
         sub_bytes_256(&mut state);
         shift_rows_256(&mut state);
         add_round_key_256(&mut state, &self.round_keys[224..240]);
 
         *block = state;
     }
+
 
     pub fn decrypt_block(&self, block: &mut [u8; 16]) {
         let mut state = *block;
@@ -548,6 +617,7 @@ impl Aes256 {
         *block = state;
     }
 
+
     pub fn encrypt_ctr(&self, nonce: &[u8; 16], data: &mut [u8]) {
         let mut counter = *nonce;
         let mut keystream = [0u8; 16];
@@ -564,10 +634,12 @@ impl Aes256 {
         }
     }
 
+
     pub fn decrypt_ctr(&self, nonce: &[u8; 16], data: &mut [u8]) {
         self.encrypt_ctr(nonce, data);
     }
 }
+
 
 #[inline]
 fn sub_bytes_256(state: &mut [u8; 16]) {
@@ -676,6 +748,7 @@ fn increment_counter_256(counter: &mut [u8; 16]) {
     }
 }
 
+
 #[inline]
 fn gf_mul(mut a: u8, mut b: u8) -> u8 {
     let mut result: u8 = 0;
@@ -692,6 +765,7 @@ fn gf_mul(mut a: u8, mut b: u8) -> u8 {
     }
     result
 }
+
 
 pub struct Aes128Ct {
 
@@ -714,6 +788,7 @@ impl Aes128Ct {
         cipher.key_expansion(key);
         cipher
     }
+
 
     fn key_expansion(&mut self, key: &[u8; 16]) {
         self.round_keys[..16].copy_from_slice(key);
@@ -746,6 +821,7 @@ impl Aes128Ct {
         }
     }
 
+
     pub fn encrypt_block(&self, block: &mut [u8; 16]) {
         let mut state = *block;
 
@@ -764,6 +840,7 @@ impl Aes128Ct {
 
         *block = state;
     }
+
 
     pub fn decrypt_block(&self, block: &mut [u8; 16]) {
         let mut state = *block;
@@ -784,6 +861,7 @@ impl Aes128Ct {
         *block = state;
     }
 
+
     pub fn encrypt_ctr(&self, nonce: &[u8; 16], data: &mut [u8]) {
         let mut counter = *nonce;
         let mut keystream = [0u8; 16];
@@ -800,9 +878,11 @@ impl Aes128Ct {
         }
     }
 
+
     pub fn decrypt_ctr(&self, nonce: &[u8; 16], data: &mut [u8]) {
         self.encrypt_ctr(nonce, data);
     }
+
 
     #[inline]
     fn sub_bytes_ct(state: &mut [u8; 16]) {
@@ -909,5 +989,208 @@ impl Aes128Ct {
                 break;
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sbox_ct_correctness() {
+
+        for i in 0..=255u8 {
+            let expected = SBOX[i as usize];
+            let computed = sbox_ct(i);
+            assert_eq!(computed, expected, "S-box mismatch at input {:#04x}: expected {:#04x}, got {:#04x}", i, expected, computed);
+        }
+    }
+
+    #[test]
+    fn test_inv_sbox_ct_correctness() {
+
+        for i in 0..=255u8 {
+            let expected = INV_SBOX[i as usize];
+            let computed = inv_sbox_ct(i);
+            assert_eq!(computed, expected, "Inv S-box mismatch at input {:#04x}: expected {:#04x}, got {:#04x}", i, expected, computed);
+        }
+    }
+
+    #[test]
+    fn test_sbox_inv_sbox_roundtrip() {
+
+        for i in 0..=255u8 {
+            assert_eq!(inv_sbox_ct(sbox_ct(i)), i);
+            assert_eq!(sbox_ct(inv_sbox_ct(i)), i);
+        }
+    }
+
+    #[test]
+    fn test_gf_mul_ct_correctness() {
+
+        assert_eq!(gf_mul_ct(0x57, 0x83), 0xc1);
+        assert_eq!(gf_mul_ct(0x02, 0x87), 0x15);
+        assert_eq!(gf_mul_ct(0, 0x42), 0);
+        assert_eq!(gf_mul_ct(0x42, 0), 0);
+        assert_eq!(gf_mul_ct(1, 0x42), 0x42);
+        assert_eq!(gf_mul_ct(0x42, 1), 0x42);
+    }
+
+    #[test]
+    fn test_aes128_known_vector() {
+
+        let key: [u8; 16] = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        ];
+        let plaintext: [u8; 16] = [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        ];
+        let expected: [u8; 16] = [
+            0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30,
+            0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a,
+        ];
+
+        let cipher = Aes128::new(&key);
+        let mut block = plaintext;
+        cipher.encrypt_block(&mut block);
+
+        assert_eq!(block, expected);
+
+
+        cipher.decrypt_block(&mut block);
+        assert_eq!(block, plaintext);
+    }
+
+    #[test]
+    fn test_aes128ct_known_vector() {
+
+        let key: [u8; 16] = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        ];
+        let plaintext: [u8; 16] = [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        ];
+        let expected: [u8; 16] = [
+            0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30,
+            0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a,
+        ];
+
+        let cipher = Aes128Ct::new(&key);
+        let mut block = plaintext;
+        cipher.encrypt_block(&mut block);
+
+        assert_eq!(block, expected);
+
+        cipher.decrypt_block(&mut block);
+        assert_eq!(block, plaintext);
+    }
+
+    #[test]
+    fn test_aes128_vs_aes128ct() {
+
+        let key: [u8; 16] = [0x42; 16];
+        let plaintext: [u8; 16] = [0x24; 16];
+
+        let cipher = Aes128::new(&key);
+        let cipher_ct = Aes128Ct::new(&key);
+
+        let mut block1 = plaintext;
+        let mut block2 = plaintext;
+
+        cipher.encrypt_block(&mut block1);
+        cipher_ct.encrypt_block(&mut block2);
+
+        assert_eq!(block1, block2);
+
+        cipher.decrypt_block(&mut block1);
+        cipher_ct.decrypt_block(&mut block2);
+
+        assert_eq!(block1, block2);
+        assert_eq!(block1, plaintext);
+    }
+
+    #[test]
+    fn test_aes256_known_vector() {
+
+        let key: [u8; 32] = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+            0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+        ];
+        let plaintext: [u8; 16] = [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        ];
+        let expected: [u8; 16] = [
+            0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf,
+            0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49, 0x60, 0x89,
+        ];
+
+        let cipher = Aes256::new(&key);
+        let mut block = plaintext;
+        cipher.encrypt_block(&mut block);
+
+        assert_eq!(block, expected);
+
+        cipher.decrypt_block(&mut block);
+        assert_eq!(block, plaintext);
+    }
+
+    #[test]
+    fn test_ctr_mode() {
+        let key: [u8; 16] = [0x2b; 16];
+        let nonce: [u8; 16] = [0x00; 16];
+        let plaintext = b"Hello, World! This is a test message.";
+
+        let cipher = Aes128::new(&key);
+
+        let mut data = [0u8; 64];
+        data[..plaintext.len()].copy_from_slice(plaintext);
+        let len = plaintext.len();
+
+
+        cipher.encrypt_ctr(&nonce, &mut data[..len]);
+
+
+        assert_ne!(&data[..len], plaintext);
+
+
+        cipher.decrypt_ctr(&nonce, &mut data[..len]);
+
+
+        assert_eq!(&data[..len], plaintext);
+    }
+
+    #[test]
+    fn test_ctr_mode_ct() {
+
+        let key: [u8; 16] = [0x2b; 16];
+        let nonce: [u8; 16] = [0x00; 16];
+        let plaintext = b"Hello, World! This is a test message.";
+
+        let cipher = Aes128Ct::new(&key);
+
+        let mut data = [0u8; 64];
+        data[..plaintext.len()].copy_from_slice(plaintext);
+        let len = plaintext.len();
+
+        cipher.encrypt_ctr(&nonce, &mut data[..len]);
+        assert_ne!(&data[..len], plaintext);
+
+        cipher.decrypt_ctr(&nonce, &mut data[..len]);
+        assert_eq!(&data[..len], plaintext);
+    }
+
+    #[test]
+    fn test_gf_mul() {
+
+        assert_eq!(gf_mul(0x57, 0x83), 0xc1);
+        assert_eq!(gf_mul(0x02, 0x87), 0x15);
     }
 }

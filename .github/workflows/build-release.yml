@@ -1,0 +1,84 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git wget flex bison gperf python3 python3-pip \
+            python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util \
+            libusb-1.0-0 pkg-config
+
+      - name: Install espup
+        run: |
+          cargo install espup
+          espup install
+          . $HOME/export-esp.sh
+          echo "$HOME/.rustup/toolchains/esp/bin" >> $GITHUB_PATH
+
+      - name: Set ESP-IDF environment
+        run: |
+          . $HOME/export-esp.sh
+          echo "LIBCLANG_PATH=$HOME/.rustup/toolchains/esp/xtensa-esp32-elf-clang/esp-clang/bin" >> $GITHUB_ENV
+          echo "ESP_IDF_VERSION=v5.2.1" >> $GITHUB_ENV
+          echo "ESP_IDF_SDKCONFIG_DEFAULTS=sdkconfig.defaults" >> $GITHUB_ENV
+          echo "ESP_IDF_CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+
+      - name: Install espflash
+        run: cargo install espflash
+
+      - name: Build release
+        run: |
+          . $HOME/export-esp.sh
+          cargo build --target xtensa-esp32s3-espidf --release
+
+      - name: Create merged firmware binary
+        run: |
+          espflash save-image --chip esp32s3 --merge \
+            target/xtensa-esp32s3-espidf/release/lunarcore \
+            lunarcore-esp32s3.bin
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lunarcore-esp32s3
+          path: lunarcore-esp32s3.bin
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: lunarcore-esp32s3.bin
+          generate_release_notes: true
+          body: |
+            ## Flash Instructions
+
+            **Prerequisites:** Install esptool (`pip install esptool`)
+
+            **Flash the firmware:**
+            ```bash
+            esptool.py --chip esp32s3 -p PORT write_flash 0x0 lunarcore-esp32s3.bin
+            ```
+
+            Replace `PORT` with your serial port:
+            - **Linux:** `/dev/ttyACM0` or `/dev/ttyUSB0`
+            - **macOS:** `/dev/cu.usbmodem*`
+            - **Windows:** `COM3` (check Device Manager)
+
+            **Supported hardware:** Heltec WiFi LoRa 32 V3, LilyGo T3-S3, or any ESP32-S3 + SX1262 board.
+
+            The binary includes bootloader + partition table + application merged at offset 0x0.

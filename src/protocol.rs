@@ -1,12 +1,17 @@
 use heapless::Vec;
 
+
 pub const SYNC: [u8; 2] = [0xAA, 0x55];
+
 
 pub const END: u8 = 0x0D;
 
+
 pub const MAX_DATA_SIZE: usize = 255;
 
+
 pub const MAX_FRAME_SIZE: usize = 2 + 2 + 1 + 1 + MAX_DATA_SIZE + 2 + 1;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -35,6 +40,7 @@ pub enum Command {
     Cad = 0x50,
 
     CadResult = 0x51,
+
 
     Reset = 0xF0,
 
@@ -69,6 +75,7 @@ impl Command {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub command: Command,
@@ -86,6 +93,7 @@ impl Frame {
         }
     }
 
+
     pub fn with_data(command: Command, sequence: u8, data: &[u8]) -> Option<Self> {
         let mut frame = Self::new(command, sequence);
         if data.len() > MAX_DATA_SIZE {
@@ -97,32 +105,40 @@ impl Frame {
         Some(frame)
     }
 
+
     pub fn encode(&self) -> Vec<u8, MAX_FRAME_SIZE> {
         let mut buf = Vec::new();
 
+
         let _ = buf.push(SYNC[0]);
         let _ = buf.push(SYNC[1]);
+
 
         let len = self.data.len() as u16;
         let _ = buf.push(len as u8);
         let _ = buf.push((len >> 8) as u8);
 
+
         let _ = buf.push(self.command as u8);
         let _ = buf.push(self.sequence);
+
 
         for &b in &self.data {
             let _ = buf.push(b);
         }
 
+
         let crc = crc16(&buf[4..]);
         let _ = buf.push(crc as u8);
         let _ = buf.push((crc >> 8) as u8);
+
 
         let _ = buf.push(END);
 
         buf
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ParserState {
@@ -137,6 +153,7 @@ enum ParserState {
     WaitCrcHigh,
     WaitEnd,
 }
+
 
 pub struct FrameParser {
     state: ParserState,
@@ -167,12 +184,14 @@ impl FrameParser {
         }
     }
 
+
     pub fn reset(&mut self) {
         self.state = ParserState::WaitSync1;
         self.data.clear();
         self.data_len = 0;
         self.data_idx = 0;
     }
+
 
     pub fn feed(&mut self, byte: u8) -> Option<Frame> {
         match self.state {
@@ -230,6 +249,7 @@ impl FrameParser {
             ParserState::WaitCrcHigh => {
                 let received_crc = (self.crc_low as u16) | ((byte as u16) << 8);
 
+
                 let mut crc_data: Vec<u8, 258> = Vec::new();
                 let _ = crc_data.push(self.command);
                 let _ = crc_data.push(self.sequence);
@@ -263,6 +283,7 @@ impl FrameParser {
         None
     }
 }
+
 
 #[rustfmt::skip]
 const CRC16_TABLE: [u16; 256] = [
@@ -300,6 +321,7 @@ const CRC16_TABLE: [u16; 256] = [
     0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0,
 ];
 
+
 #[inline]
 pub fn crc16(data: &[u8]) -> u16 {
     let mut crc: u16 = 0xFFFF;
@@ -310,21 +332,26 @@ pub fn crc16(data: &[u8]) -> u16 {
     crc
 }
 
+
 pub fn build_pong(sequence: u8) -> Frame {
     Frame::new(Command::Pong, sequence)
 }
+
 
 pub fn build_config_ack(sequence: u8) -> Frame {
     Frame::new(Command::ConfigAck, sequence)
 }
 
+
 pub fn build_tx_done(sequence: u8) -> Frame {
     Frame::new(Command::TxDone, sequence)
 }
 
+
 pub fn build_tx_error(sequence: u8, error_code: u8) -> Option<Frame> {
     Frame::with_data(Command::TxError, sequence, &[error_code])
 }
+
 
 pub fn build_receive(rssi: i16, snr: i8, data: &[u8]) -> Option<Frame> {
     if data.len() > MAX_DATA_SIZE - 4 {
@@ -347,17 +374,21 @@ pub fn build_receive(rssi: i16, snr: i8, data: &[u8]) -> Option<Frame> {
     Some(frame)
 }
 
+
 pub fn build_cad_result(sequence: u8, detected: bool) -> Option<Frame> {
     Frame::with_data(Command::CadResult, sequence, &[if detected { 1 } else { 0 }])
 }
+
 
 pub fn build_version_response(sequence: u8, version: &str) -> Option<Frame> {
     Frame::with_data(Command::VersionResponse, sequence, version.as_bytes())
 }
 
+
 pub fn build_error(sequence: u8, message: &str) -> Option<Frame> {
     Frame::with_data(Command::Error, sequence, message.as_bytes())
 }
+
 
 pub fn build_stats_response(
     sequence: u8,
@@ -374,6 +405,7 @@ pub fn build_stats_response(
     Frame::with_data(Command::StatsResponse, sequence, &data)
 }
 
+
 pub fn parse_config(data: &[u8]) -> Option<crate::sx1262::RadioConfig> {
     if data.len() < 14 {
         return None;
@@ -381,7 +413,14 @@ pub fn parse_config(data: &[u8]) -> Option<crate::sx1262::RadioConfig> {
 
     let frequency = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     let spreading_factor = data[4];
-    let bandwidth = (u16::from_le_bytes([data[5], data[6]]) / 125) as u8;
+    let bandwidth_khz = u16::from_le_bytes([data[5], data[6]]);
+
+    let bandwidth = match bandwidth_khz {
+        0..=80 => 0x03,
+        81..=187 => 0x04,
+        188..=375 => 0x05,
+        _ => 0x06,
+    };
     let coding_rate = data[7];
     let tx_power = data[8] as i8;
     let sync_word = data[9];
@@ -391,7 +430,7 @@ pub fn parse_config(data: &[u8]) -> Option<crate::sx1262::RadioConfig> {
     Some(crate::sx1262::RadioConfig {
         frequency,
         spreading_factor,
-        bandwidth: bandwidth.min(2),
+        bandwidth,
         coding_rate,
         tx_power,
         sync_word,

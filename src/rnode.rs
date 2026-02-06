@@ -1,17 +1,24 @@
 use heapless::Vec;
 use crate::crypto::sha256::Sha256;
 
+
 pub const FEND: u8 = 0xC0;
+
 
 pub const FESC: u8 = 0xDB;
 
+
 pub const TFEND: u8 = 0xDC;
+
 
 pub const TFESC: u8 = 0xDD;
 
+
 pub const MAX_DATA_SIZE: usize = 512;
 
+
 pub const MAX_FRAME_SIZE: usize = MAX_DATA_SIZE * 2 + 4;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -34,9 +41,11 @@ pub enum KissCommand {
     Return = 0xFF,
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RNodeCommand {
+
 
     Frequency = 0x01,
 
@@ -58,6 +67,7 @@ pub enum RNodeCommand {
 
     Ready = 0x0F,
 
+
     PreambleLength = 0x10,
 
     SymbolTimeout = 0x11,
@@ -70,6 +80,7 @@ pub enum RNodeCommand {
 
     Ldro = 0x15,
 
+
     Leave = 0x0A,
 
     SaveConfig = 0x0B,
@@ -77,6 +88,7 @@ pub enum RNodeCommand {
     ResetConfig = 0x0C,
 
     Bootloader = 0x0D,
+
 
     StatRx = 0x21,
 
@@ -93,6 +105,7 @@ pub enum RNodeCommand {
     AirtimeLimit = 0x27,
 
     AirtimeUsage = 0x28,
+
 
     Blink = 0x30,
 
@@ -112,17 +125,21 @@ pub enum RNodeCommand {
 
     RomInfo = 0x4B,
 
+
     HardwareSerial = 0x55,
 
     Signature = 0x56,
 
+
     TcxoVoltage = 0x60,
+
 
     Error = 0x90,
 
     RomData = 0xA0,
 
     Info = 0xB0,
+
 
     DataRssi = 0xFE,
 }
@@ -184,6 +201,7 @@ impl RNodeCommand {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct KissFrame {
 
@@ -201,6 +219,7 @@ impl KissFrame {
         }
     }
 
+
     pub fn data_frame(data: &[u8]) -> Option<Self> {
         if data.len() > MAX_DATA_SIZE {
             return None;
@@ -211,6 +230,7 @@ impl KissFrame {
         }
         Some(frame)
     }
+
 
     pub fn command_frame(cmd: RNodeCommand, data: &[u8]) -> Option<Self> {
         if data.len() > MAX_DATA_SIZE {
@@ -223,30 +243,38 @@ impl KissFrame {
         Some(frame)
     }
 
+
     pub fn encode(&self) -> Vec<u8, MAX_FRAME_SIZE> {
         let mut buf = Vec::new();
 
+
         let _ = buf.push(FEND);
 
+
         escape_byte(self.command, &mut buf);
+
 
         for &b in &self.data {
             escape_byte(b, &mut buf);
         }
+
 
         let _ = buf.push(FEND);
 
         buf
     }
 
+
     pub fn port(&self) -> u8 {
         (self.command >> 4) & 0x0F
     }
+
 
     pub fn cmd_type(&self) -> u8 {
         self.command & 0x0F
     }
 }
+
 
 fn escape_byte(byte: u8, buf: &mut Vec<u8, MAX_FRAME_SIZE>) {
     match byte {
@@ -264,6 +292,7 @@ fn escape_byte(byte: u8, buf: &mut Vec<u8, MAX_FRAME_SIZE>) {
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ParserState {
 
@@ -275,6 +304,7 @@ enum ParserState {
 
     Escape,
 }
+
 
 pub struct KissParser {
     state: ParserState,
@@ -297,11 +327,13 @@ impl KissParser {
         }
     }
 
+
     pub fn reset(&mut self) {
         self.state = ParserState::WaitStart;
         self.command = 0;
         self.data.clear();
     }
+
 
     pub fn feed(&mut self, byte: u8) -> Option<KissFrame> {
         match self.state {
@@ -362,6 +394,7 @@ impl KissParser {
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RNodeState {
 
@@ -373,6 +406,7 @@ pub enum RNodeState {
 
     Receiving,
 }
+
 
 #[derive(Debug, Clone)]
 pub struct RNodeConfig {
@@ -424,12 +458,14 @@ impl RNodeConfig {
         }
     }
 
+
     pub fn us915() -> Self {
         Self {
             frequency: 915_000_000,
             ..Default::default()
         }
     }
+
 
     pub fn bandwidth_to_hz(bw_value: u8) -> u32 {
         match bw_value {
@@ -440,6 +476,7 @@ impl RNodeConfig {
         }
     }
 
+
     pub fn hz_to_bandwidth(hz: u32) -> u8 {
         match hz {
             0..=187_500 => 0,
@@ -448,11 +485,14 @@ impl RNodeConfig {
         }
     }
 
+
     pub fn coding_rate_to_ratio(cr: u8) -> (u8, u8) {
         (4, cr)
     }
 
+
     pub fn should_enable_ldro(&self) -> bool {
+
 
         if self.bandwidth <= 125_000 {
             self.spreading_factor >= 11
@@ -463,6 +503,7 @@ impl RNodeConfig {
         }
     }
 
+
     pub fn packet_airtime_ms(&self, payload_len: usize) -> u32 {
         let sf = self.spreading_factor as f32;
         let bw = self.bandwidth as f32;
@@ -470,9 +511,12 @@ impl RNodeConfig {
         let pl = payload_len as f32;
         let preamble = self.preamble_length as f32;
 
+
         let t_sym = (2.0_f32.powf(sf)) / bw * 1000.0;
 
+
         let t_preamble = (preamble + 4.25) * t_sym;
+
 
         let de = if self.should_enable_ldro() { 1.0 } else { 0.0 };
         let h = if self.implicit_header { 1.0 } else { 0.0 };
@@ -486,6 +530,7 @@ impl RNodeConfig {
 
         (t_preamble + t_payload) as u32
     }
+
 
     #[cfg(feature = "sx1262")]
     pub fn to_radio_config(&self) -> crate::sx1262::RadioConfig {
@@ -503,6 +548,7 @@ impl RNodeConfig {
         }
     }
 }
+
 
 #[derive(Debug, Clone, Default)]
 pub struct RNodeStats {
@@ -523,6 +569,7 @@ pub struct RNodeStats {
 
     pub channel_busy: u64,
 }
+
 
 #[derive(Debug, Clone)]
 pub struct RNodeIdentity {
@@ -568,6 +615,7 @@ impl RNodeIdentity {
     }
 }
 
+
 pub struct RNodeHandler {
 
     parser: KissParser,
@@ -611,6 +659,7 @@ impl RNodeHandler {
         }
     }
 
+
     pub fn with_identity(identity: RNodeIdentity) -> Self {
         Self {
             identity,
@@ -618,17 +667,21 @@ impl RNodeHandler {
         }
     }
 
+
     pub fn set_serial(&mut self, serial: &[u8; 16]) {
         self.identity.serial = *serial;
     }
+
 
     pub fn set_battery_voltage(&mut self, mv: u16) {
         self.battery_mv = mv;
     }
 
+
     pub fn set_random_seed(&mut self, seed: u32) {
         self.random_seed = seed;
     }
+
 
     pub fn next_random(&mut self) -> u32 {
 
@@ -636,9 +689,16 @@ impl RNodeHandler {
         self.random_seed
     }
 
+
     pub fn feed_serial(&mut self, byte: u8) -> Option<KissFrame> {
         self.parser.feed(byte)
     }
+
+
+    pub fn reset_parser(&mut self) {
+        self.parser.reset();
+    }
+
 
     pub fn process_frame(&mut self, frame: &KissFrame) -> Option<KissFrame> {
 
@@ -646,7 +706,9 @@ impl RNodeHandler {
             return None;
         }
 
+
         match RNodeCommand::from_byte(frame.command) {
+
 
             Some(RNodeCommand::Frequency) => {
                 if frame.data.len() >= 4 && !self.locked {
@@ -729,6 +791,7 @@ impl RNodeHandler {
                 KissFrame::command_frame(RNodeCommand::Ldro, &[if self.config.ldro { 1 } else { 0 }])
             }
 
+
             Some(RNodeCommand::RadioState) => {
                 if frame.data.len() >= 1 {
                     self.state = if frame.data[0] != 0 {
@@ -757,7 +820,9 @@ impl RNodeHandler {
                 KissFrame::command_frame(RNodeCommand::Promisc, &[if self.promiscuous { 1 } else { 0 }])
             }
 
+
             Some(RNodeCommand::Detect) => {
+
 
                 KissFrame::command_frame(RNodeCommand::Detect, &[0x01, self.identity.hw_revision])
             }
@@ -809,6 +874,7 @@ impl RNodeHandler {
                 KissFrame::command_frame(RNodeCommand::Signature, &hash)
             }
 
+
             Some(RNodeCommand::StatRx) => {
                 KissFrame::command_frame(RNodeCommand::StatRx, &self.stats.rx_count.to_be_bytes())
             }
@@ -830,6 +896,7 @@ impl RNodeHandler {
             }
 
             Some(RNodeCommand::StatChannel) => {
+
 
                 let util = if self.stats.channel_busy > 0 {
                     ((self.stats.airtime_used * 100) / self.stats.channel_busy).min(100) as u8
@@ -853,7 +920,9 @@ impl RNodeHandler {
                 KissFrame::command_frame(RNodeCommand::AirtimeUsage, &usage.to_be_bytes())
             }
 
+
             Some(RNodeCommand::Blink) => {
+
 
                 KissFrame::command_frame(RNodeCommand::Blink, &[0x01])
             }
@@ -870,6 +939,7 @@ impl RNodeHandler {
                 let r = self.next_random();
                 KissFrame::command_frame(RNodeCommand::Random, &r.to_be_bytes())
             }
+
 
             Some(RNodeCommand::Leave) => {
 
@@ -891,8 +961,10 @@ impl RNodeHandler {
 
             Some(RNodeCommand::Bootloader) => {
 
+
                 KissFrame::command_frame(RNodeCommand::Bootloader, &[0x01])
             }
+
 
             Some(RNodeCommand::Error) => {
 
@@ -910,11 +982,13 @@ impl RNodeHandler {
         }
     }
 
+
     pub fn process_lora_packet(&mut self, data: &[u8], rssi: i16, snr: i8) -> KissFrame {
         self.stats.rx_count += 1;
         self.stats.rx_bytes += data.len() as u64;
         self.stats.last_rssi = rssi;
         self.stats.last_snr = snr;
+
 
         let mut frame = KissFrame::new(RNodeCommand::DataRssi as u8);
         for &b in data {
@@ -929,9 +1003,11 @@ impl RNodeHandler {
         frame
     }
 
+
     pub fn process_lora_packet_raw(&mut self, data: &[u8]) -> KissFrame {
         self.stats.rx_count += 1;
         self.stats.rx_bytes += data.len() as u64;
+
 
         let mut frame = KissFrame::new(KissCommand::DataFrame as u8);
         for &b in data {
@@ -939,6 +1015,7 @@ impl RNodeHandler {
         }
         frame
     }
+
 
     pub fn get_tx_data<'a>(&mut self, frame: &'a KissFrame) -> Option<&'a [u8]> {
         if frame.command == KissCommand::DataFrame as u8 {
@@ -953,49 +1030,61 @@ impl RNodeHandler {
         }
     }
 
+
     pub fn record_channel_busy(&mut self, ms: u64) {
         self.stats.channel_busy += ms;
     }
+
 
     pub fn config(&self) -> &RNodeConfig {
         &self.config
     }
 
+
     pub fn config_mut(&mut self) -> &mut RNodeConfig {
         &mut self.config
     }
+
 
     pub fn state(&self) -> RNodeState {
         self.state
     }
 
+
     pub fn set_state(&mut self, state: RNodeState) {
         self.state = state;
     }
+
 
     pub fn stats(&self) -> &RNodeStats {
         &self.stats
     }
 
+
     pub fn reset_stats(&mut self) {
         self.stats = RNodeStats::default();
     }
+
 
     pub fn identity(&self) -> &RNodeIdentity {
         &self.identity
     }
 
+
     pub fn is_online(&self) -> bool {
         self.state != RNodeState::Offline
     }
+
 
     pub fn is_locked(&self) -> bool {
         self.locked
     }
 
+
     pub fn is_promiscuous(&self) -> bool {
         self.promiscuous
     }
+
 
     pub fn check_airtime_limit(&self, packet_len: usize) -> bool {
         if self.airtime_limit == 0 {
@@ -1010,5 +1099,180 @@ impl RNodeHandler {
 impl Default for RNodeHandler {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_escape_encode() {
+        let frame = KissFrame::data_frame(&[0x00, 0xC0, 0xDB, 0xFF]).unwrap();
+        let encoded = frame.encode();
+
+
+        assert_eq!(encoded[0], FEND);
+        assert_eq!(encoded[1], 0x00);
+        assert_eq!(encoded[2], 0x00);
+        assert_eq!(encoded[3], FESC);
+        assert_eq!(encoded[4], TFEND);
+        assert_eq!(encoded[5], FESC);
+        assert_eq!(encoded[6], TFESC);
+        assert_eq!(encoded[7], 0xFF);
+        assert_eq!(encoded[8], FEND);
+    }
+
+    #[test]
+    fn test_parser() {
+        let mut parser = KissParser::new();
+
+
+        let bytes = [FEND, 0x00, 0x01, 0x02, 0x03, FEND];
+
+        for (i, &byte) in bytes.iter().enumerate() {
+            let result = parser.feed(byte);
+            if i == bytes.len() - 1 {
+                assert!(result.is_some());
+                let frame = result.unwrap();
+                assert_eq!(frame.command, 0x00);
+                assert_eq!(frame.data.len(), 3);
+            } else {
+                assert!(result.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn test_parser_escape() {
+        let mut parser = KissParser::new();
+
+
+        let bytes = [FEND, 0x00, FESC, TFEND, FEND];
+
+        for &byte in &bytes {
+            if let Some(frame) = parser.feed(byte) {
+                assert_eq!(frame.data.len(), 1);
+                assert_eq!(frame.data[0], FEND);
+            }
+        }
+    }
+
+    #[test]
+    fn test_rnode_config() {
+        let mut handler = RNodeHandler::new();
+
+
+        let frame = KissFrame::command_frame(
+            RNodeCommand::Frequency,
+            &915_000_000u32.to_be_bytes(),
+        ).unwrap();
+        handler.process_frame(&frame);
+        assert_eq!(handler.config().frequency, 915_000_000);
+
+
+        let frame = KissFrame::command_frame(
+            RNodeCommand::SpreadingFactor,
+            &[10],
+        ).unwrap();
+        handler.process_frame(&frame);
+        assert_eq!(handler.config().spreading_factor, 10);
+    }
+
+    #[test]
+    fn test_rnode_statistics() {
+        let mut handler = RNodeHandler::new();
+
+
+        let _ = handler.process_lora_packet(&[0x01, 0x02, 0x03], -80, 5);
+        assert_eq!(handler.stats().rx_count, 1);
+        assert_eq!(handler.stats().rx_bytes, 3);
+        assert_eq!(handler.stats().last_rssi, -80);
+        assert_eq!(handler.stats().last_snr, 5);
+
+
+        let _ = handler.process_lora_packet(&[0x04, 0x05], -90, 3);
+        assert_eq!(handler.stats().rx_count, 2);
+        assert_eq!(handler.stats().rx_bytes, 5);
+    }
+
+    #[test]
+    fn test_rnode_airtime() {
+        let config = RNodeConfig::default();
+
+
+        let airtime = config.packet_airtime_ms(50);
+        assert!(airtime > 50);
+        assert!(airtime < 500);
+    }
+
+    #[test]
+    fn test_rnode_ldro_calculation() {
+        let mut config = RNodeConfig::default();
+
+
+        config.spreading_factor = 9;
+        config.bandwidth = 125_000;
+        assert!(!config.should_enable_ldro());
+
+
+        config.spreading_factor = 11;
+        assert!(config.should_enable_ldro());
+
+
+        config.spreading_factor = 12;
+        assert!(config.should_enable_ldro());
+
+
+        config.bandwidth = 500_000;
+        assert!(!config.should_enable_ldro());
+    }
+
+    #[test]
+    fn test_rnode_identity_hash() {
+        let mut identity = RNodeIdentity::default();
+        identity.serial = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                          0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10];
+
+        let hash1 = identity.identity_hash();
+        let hash2 = identity.identity_hash();
+
+
+        assert_eq!(hash1, hash2);
+
+
+        identity.serial[0] = 0xFF;
+        let hash3 = identity.identity_hash();
+        assert_ne!(hash1, hash3);
+    }
+
+    #[test]
+    fn test_rnode_airtime_limit() {
+        let mut handler = RNodeHandler::new();
+        handler.airtime_limit = 1000;
+
+
+        assert!(handler.check_airtime_limit(10));
+
+
+    }
+
+    #[test]
+    fn test_rnode_all_commands() {
+        let mut handler = RNodeHandler::new();
+
+
+        let detect_frame = KissFrame::command_frame(RNodeCommand::Detect, &[]).unwrap();
+        assert!(handler.process_frame(&detect_frame).is_some());
+
+        let ready_frame = KissFrame::command_frame(RNodeCommand::Ready, &[]).unwrap();
+        assert!(handler.process_frame(&ready_frame).is_some());
+
+        let fw_frame = KissFrame::command_frame(RNodeCommand::FwVersion, &[]).unwrap();
+        assert!(handler.process_frame(&fw_frame).is_some());
+
+        let platform_frame = KissFrame::command_frame(RNodeCommand::Platform, &[]).unwrap();
+        assert!(handler.process_frame(&platform_frame).is_some());
     }
 }

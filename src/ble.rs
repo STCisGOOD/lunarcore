@@ -3,17 +3,24 @@ use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use critical_section::Mutex;
 use heapless::{Vec, Deque};
 
+
 pub const MAX_CONNECTIONS: usize = 3;
+
 
 pub const MAX_MTU: usize = 512;
 
+
 pub const MAX_ADV_DATA: usize = 31;
+
 
 pub const MAX_SCAN_RSP: usize = 31;
 
+
 pub const TX_QUEUE_DEPTH: usize = 8;
 
+
 pub const RX_BUFFER_SIZE: usize = 512;
+
 
 pub mod nus {
 
@@ -32,6 +39,7 @@ pub mod nus {
         0x93, 0xf3, 0xa3, 0xb5, 0x03, 0x00, 0x40, 0x6e,
     ];
 }
+
 
 pub mod meshtastic {
 
@@ -56,6 +64,7 @@ pub mod meshtastic {
     ];
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionState {
     Disconnected,
@@ -64,12 +73,14 @@ pub enum ConnectionState {
     Encrypted,
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceType {
     Nus,
     Meshtastic,
     Unknown,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BleError {
@@ -86,6 +97,7 @@ pub enum BleError {
     InvalidParameter,
 }
 
+
 #[derive(Debug, Clone)]
 pub enum BleEvent {
     Connected { conn_handle: u16 },
@@ -98,6 +110,7 @@ pub enum BleEvent {
     EncryptionChanged { conn_handle: u16, encrypted: bool },
 }
 
+
 #[derive(Debug, Clone)]
 pub struct BleDataPacket {
 
@@ -107,6 +120,7 @@ pub struct BleDataPacket {
 
     pub data: Vec<u8, RX_BUFFER_SIZE>,
 }
+
 
 pub struct BleConnection {
 
@@ -159,6 +173,7 @@ impl BleConnection {
         }
     }
 
+
     pub fn is_subscribed(&self) -> bool {
         match self.service {
             ServiceType::Nus => self.nus_tx_notify,
@@ -167,9 +182,11 @@ impl BleConnection {
         }
     }
 
+
     pub fn max_payload(&self) -> usize {
         (self.mtu as usize).saturating_sub(3)
     }
+
 
     pub fn queue_tx(&mut self, data: &[u8]) -> Result<(), BleError> {
         if data.len() > self.max_payload() {
@@ -184,11 +201,15 @@ impl BleConnection {
     }
 }
 
+
 static BLE_STATE: Mutex<RefCell<Option<BleState>>> = Mutex::new(RefCell::new(None));
+
 
 static EVENT_QUEUE: Mutex<RefCell<Deque<BleEvent, 16>>> = Mutex::new(RefCell::new(Deque::new()));
 
+
 static ADVERTISING: AtomicBool = AtomicBool::new(false);
+
 
 static CONNECTION_COUNT: AtomicU16 = AtomicU16::new(0);
 
@@ -202,6 +223,7 @@ struct BleState {
     mesh_to_radio_handle: u16,
     mesh_from_radio_handle: u16,
     mesh_from_num_handle: u16,
+
 
     from_radio_queue: Deque<Vec<u8, MAX_MTU>, 16>,
 }
@@ -261,6 +283,7 @@ impl BleState {
     }
 }
 
+
 pub struct BleManager {
     initialized: bool,
 }
@@ -271,14 +294,17 @@ impl BleManager {
         Self { initialized: false }
     }
 
+
     pub fn init(&mut self, device_name: &str) -> Result<(), BleError> {
         if self.initialized {
             return Err(BleError::AlreadyInitialized);
         }
 
+
         critical_section::with(|cs| {
             BLE_STATE.borrow(cs).replace(Some(BleState::new(device_name)));
         });
+
 
         unsafe {
             self.init_nimble()?;
@@ -289,7 +315,9 @@ impl BleManager {
         Ok(())
     }
 
+
     unsafe fn init_nimble(&self) -> Result<(), BleError> {
+
 
         #[cfg(target_arch = "xtensa")]
         {
@@ -298,19 +326,23 @@ impl BleManager {
                 fn nimble_port_freertos_init(task: extern "C" fn(*mut core::ffi::c_void)) -> i32;
             }
 
+
             let rc = nimble_port_init();
             if rc != 0 {
                 return Err(BleError::StackError(rc));
             }
 
+
             esp_idf_sys::ble_hs_cfg.sync_cb = Some(on_sync);
             esp_idf_sys::ble_hs_cfg.reset_cb = Some(on_reset);
+
 
             let rc = nimble_port_freertos_init(nimble_host_task);
             if rc != 0 {
                 return Err(BleError::StackError(rc));
             }
         }
+
 
         #[cfg(not(target_arch = "xtensa"))]
         {
@@ -319,6 +351,7 @@ impl BleManager {
 
         Ok(())
     }
+
 
     unsafe fn register_services(&self) -> Result<(), BleError> {
         #[cfg(target_arch = "xtensa")]
@@ -339,6 +372,7 @@ impl BleManager {
                     },
                 ],
             };
+
 
             static MESH_SERVICE: GattService = GattService {
                 uuid: &meshtastic::SERVICE,
@@ -366,6 +400,7 @@ impl BleManager {
                 fn ble_gatts_add_svcs(svcs: *const GattService) -> i32;
             }
 
+
             let services = [NUS_SERVICE, MESH_SERVICE];
 
             let rc = ble_gatts_count_cfg(services.as_ptr());
@@ -381,6 +416,7 @@ impl BleManager {
 
         Ok(())
     }
+
 
     pub fn start_advertising(&mut self) -> Result<(), BleError> {
         if !self.initialized {
@@ -428,6 +464,7 @@ impl BleManager {
         Ok(())
     }
 
+
     pub fn stop_advertising(&mut self) -> Result<(), BleError> {
         if !self.initialized {
             return Err(BleError::NotInitialized);
@@ -449,13 +486,16 @@ impl BleManager {
         Ok(())
     }
 
+
     pub fn is_advertising(&self) -> bool {
         ADVERTISING.load(Ordering::SeqCst)
     }
 
+
     pub fn connection_count(&self) -> u16 {
         CONNECTION_COUNT.load(Ordering::SeqCst)
     }
+
 
     pub fn send(&self, conn_handle: u16, data: &[u8]) -> Result<(), BleError> {
         if !self.initialized {
@@ -478,6 +518,7 @@ impl BleManager {
 
             conn.queue_tx(data)?;
 
+
             let char_handle = match conn.service {
                 ServiceType::Nus => state.nus_tx_handle,
                 ServiceType::Meshtastic => state.mesh_from_radio_handle,
@@ -492,6 +533,7 @@ impl BleManager {
             Ok(())
         })
     }
+
 
     #[cfg(target_arch = "xtensa")]
     unsafe fn send_notification(&self, conn_handle: u16, char_handle: u16, data: &[u8]) -> Result<(), BleError> {
@@ -526,6 +568,7 @@ impl BleManager {
         Ok(())
     }
 
+
     pub fn broadcast(&self, service: ServiceType, data: &[u8]) -> Result<usize, BleError> {
         if !self.initialized {
             return Err(BleError::NotInitialized);
@@ -551,6 +594,7 @@ impl BleManager {
             Ok(sent)
         })
     }
+
 
     pub fn notify_from_num(&self, counter: u32) -> Result<usize, BleError> {
         if !self.initialized {
@@ -588,6 +632,7 @@ impl BleManager {
         })
     }
 
+
     pub fn queue_from_radio(&self, data: &[u8]) -> Result<(), BleError> {
         if !self.initialized {
             return Err(BleError::NotInitialized);
@@ -601,14 +646,17 @@ impl BleManager {
             let mut state = BLE_STATE.borrow(cs).borrow_mut();
             let state = state.as_mut().ok_or(BleError::NotInitialized)?;
 
+
             let mut vec: Vec<u8, MAX_MTU> = Vec::new();
             vec.extend_from_slice(data).map_err(|_| BleError::MtuExceeded)?;
+
 
             state.from_radio_queue.push_back(vec).map_err(|_| BleError::QueueFull)?;
 
             Ok(())
         })
     }
+
 
     pub fn dequeue_from_radio(&self) -> Option<Vec<u8, MAX_MTU>> {
         if !self.initialized {
@@ -621,6 +669,7 @@ impl BleManager {
         })
     }
 
+
     pub fn has_from_radio_data(&self) -> bool {
         if !self.initialized {
             return false;
@@ -632,23 +681,28 @@ impl BleManager {
         })
     }
 
+
     pub fn poll_event(&self) -> Option<BleEvent> {
         critical_section::with(|cs| {
             EVENT_QUEUE.borrow(cs).borrow_mut().pop_front()
         })
     }
 
+
     pub fn read(&self) -> Option<Vec<u8, RX_BUFFER_SIZE>> {
         self.read_with_service().map(|packet| packet.data)
     }
+
 
     pub fn read_with_service(&self) -> Option<BleDataPacket> {
         if !self.initialized {
             return None;
         }
 
+
         critical_section::with(|cs| {
             let mut queue = EVENT_QUEUE.borrow(cs).borrow_mut();
+
 
             let mut found_idx = None;
             for (idx, event) in queue.iter().enumerate() {
@@ -659,6 +713,7 @@ impl BleManager {
             }
 
             if found_idx.is_some() {
+
 
                 let mut temp: Deque<BleEvent, 16> = Deque::new();
                 let mut result = None;
@@ -677,6 +732,7 @@ impl BleManager {
                     let _ = temp.push_back(event);
                 }
 
+
                 while let Some(event) = temp.pop_front() {
                     let _ = queue.push_back(event);
                 }
@@ -687,6 +743,7 @@ impl BleManager {
             }
         })
     }
+
 
     pub fn process_tx(&self) -> Result<(), BleError> {
         if !self.initialized {
@@ -713,6 +770,7 @@ impl BleManager {
                                 let _ = self.send_notification(conn.handle, char_handle, &data);
                             }
 
+
                         }
                     }
                 }
@@ -720,6 +778,7 @@ impl BleManager {
             Ok(())
         })
     }
+
 
     pub fn disconnect(&self, conn_handle: u16) -> Result<(), BleError> {
         if !self.initialized {
@@ -740,6 +799,7 @@ impl BleManager {
 
         Ok(())
     }
+
 
     pub fn update_conn_params(
         &self,
@@ -787,6 +847,7 @@ impl Default for BleManager {
     }
 }
 
+
 #[cfg(target_arch = "xtensa")]
 extern "C" fn gap_event_callback(event: *mut ble_gap_event, _arg: *mut core::ffi::c_void) -> i32 {
     unsafe {
@@ -825,6 +886,7 @@ extern "C" fn gap_event_callback(event: *mut ble_gap_event, _arg: *mut core::ffi
                         BleEvent::Disconnected { conn_handle, reason }
                     );
                 });
+
 
                 if CONNECTION_COUNT.load(Ordering::SeqCst) < MAX_CONNECTIONS as u16 {
 
@@ -925,6 +987,7 @@ extern "C" fn gap_event_callback(event: *mut ble_gap_event, _arg: *mut core::ffi
     0
 }
 
+
 #[cfg(target_arch = "xtensa")]
 extern "C" fn nus_rx_callback(
     conn_handle: u16,
@@ -937,6 +1000,7 @@ extern "C" fn nus_rx_callback(
         if ctxt.op == BLE_GATT_ACCESS_OP_WRITE_CHR {
             let om = ctxt.om;
             let mut data: Vec<u8, RX_BUFFER_SIZE> = Vec::new();
+
 
             let mut current = om;
             while !current.is_null() {
@@ -960,6 +1024,7 @@ extern "C" fn nus_rx_callback(
 
     0
 }
+
 
 #[cfg(target_arch = "xtensa")]
 extern "C" fn mesh_to_radio_callback(
@@ -997,6 +1062,7 @@ extern "C" fn mesh_to_radio_callback(
     0
 }
 
+
 #[cfg(target_arch = "xtensa")]
 extern "C" fn mesh_from_radio_callback(
     _conn_handle: u16,
@@ -1025,11 +1091,13 @@ extern "C" fn mesh_from_radio_callback(
     0
 }
 
+
 #[cfg(target_arch = "xtensa")]
 extern "C" fn on_sync() {
 
     ADVERTISING.store(false, Ordering::SeqCst);
 }
+
 
 #[cfg(target_arch = "xtensa")]
 extern "C" fn on_reset(reason: i32) {
@@ -1038,6 +1106,7 @@ extern "C" fn on_reset(reason: i32) {
     ADVERTISING.store(false, Ordering::SeqCst);
     CONNECTION_COUNT.store(0, Ordering::SeqCst);
 }
+
 
 #[cfg(target_arch = "xtensa")]
 extern "C" fn nimble_host_task(_arg: *mut core::ffi::c_void) {
@@ -1049,6 +1118,7 @@ extern "C" fn nimble_host_task(_arg: *mut core::ffi::c_void) {
     }
 }
 
+
 #[cfg(target_arch = "xtensa")]
 #[repr(C)]
 struct ble_gap_event {
@@ -1056,6 +1126,7 @@ struct ble_gap_event {
     _padding: [u8; 3],
     event_data: ble_gap_event_union,
 }
+
 
 #[cfg(target_arch = "xtensa")]
 #[repr(C)]
@@ -1154,6 +1225,7 @@ struct os_mbuf {
     next: *mut os_mbuf,
 }
 
+
 #[cfg(target_arch = "xtensa")]
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -1161,6 +1233,7 @@ struct GattService {
     uuid: *const [u8; 16],
     characteristics: *const [GattCharacteristic],
 }
+
 
 #[cfg(target_arch = "xtensa")]
 #[repr(C)]
@@ -1171,6 +1244,7 @@ struct GattCharacteristic {
     callback: Option<extern "C" fn(u16, u16, *mut ble_gatt_access_ctxt, *mut core::ffi::c_void) -> i32>,
 }
 
+
 #[cfg(target_arch = "xtensa")]
 unsafe impl Sync for GattService {}
 #[cfg(target_arch = "xtensa")]
@@ -1179,6 +1253,7 @@ unsafe impl Send for GattService {}
 unsafe impl Sync for GattCharacteristic {}
 #[cfg(target_arch = "xtensa")]
 unsafe impl Send for GattCharacteristic {}
+
 
 #[cfg(target_arch = "xtensa")]
 const BLE_GAP_CONN_MODE_UND: u8 = 0;
@@ -1215,16 +1290,20 @@ const CHR_FLAG_NOTIFY: u16 = 0x0010;
 #[cfg(target_arch = "xtensa")]
 const CHR_FLAG_READ: u16 = 0x0002;
 
+
 pub fn build_adv_data(name: &str, include_nus: bool, include_meshtastic: bool) -> Vec<u8, MAX_ADV_DATA> {
     let mut data: Vec<u8, MAX_ADV_DATA> = Vec::new();
+
 
     let _ = data.push(0x02);
     let _ = data.push(0x01);
     let _ = data.push(0x06);
 
+
     let _ = data.push(0x02);
     let _ = data.push(0x0A);
     let _ = data.push(0x00);
+
 
     let name_bytes = name.as_bytes();
     let max_name = MAX_ADV_DATA - data.len() - 2;
@@ -1244,8 +1323,10 @@ pub fn build_adv_data(name: &str, include_nus: bool, include_meshtastic: bool) -
     data
 }
 
+
 pub fn build_scan_rsp(include_nus: bool, include_meshtastic: bool) -> Vec<u8, MAX_SCAN_RSP> {
     let mut data: Vec<u8, MAX_SCAN_RSP> = Vec::new();
+
 
     if include_nus && data.len() + 18 <= MAX_SCAN_RSP {
         let _ = data.push(17);
@@ -1264,4 +1345,45 @@ pub fn build_scan_rsp(include_nus: bool, include_meshtastic: bool) -> Vec<u8, MA
     }
 
     data
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nus_uuids() {
+
+        assert_eq!(nus::SERVICE[12], 0x01);
+        assert_eq!(nus::RX[12], 0x02);
+        assert_eq!(nus::TX[12], 0x03);
+    }
+
+    #[test]
+    fn test_adv_data_builder() {
+        let data = build_adv_data("LunarCore", true, false);
+        assert!(data.len() <= MAX_ADV_DATA);
+
+
+        assert_eq!(data[0], 0x02);
+        assert_eq!(data[1], 0x01);
+        assert_eq!(data[2], 0x06);
+    }
+
+    #[test]
+    fn test_connection() {
+        let conn = BleConnection::new(1, [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+        assert_eq!(conn.handle, 1);
+        assert_eq!(conn.state, ConnectionState::Connected);
+        assert_eq!(conn.mtu, 23);
+        assert_eq!(conn.max_payload(), 20);
+    }
+
+    #[test]
+    fn test_ble_manager_init() {
+
+        let manager = BleManager::new();
+        assert!(!manager.initialized);
+    }
 }

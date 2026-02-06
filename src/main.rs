@@ -11,6 +11,7 @@ mod transport;
 mod session;
 mod onion;
 
+
 use esp_idf_hal::delay::FreeRtos;
 use esp_idf_sys as _;
 
@@ -23,7 +24,7 @@ use esp_idf_hal::adc::attenuation::DB_11;
 use esp_idf_hal::adc::oneshot::config::AdcChannelConfig;
 use esp_idf_hal::adc::oneshot::{AdcDriver, AdcChannelDriver};
 use display::StatusDisplay;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering};
 use crypto::sha256::Sha256;
 use heapless::Vec;
 
@@ -36,6 +37,7 @@ use ble::{BleManager, ServiceType};
 use session::{SessionManager, Session, SessionParams, SessionError, MessageHeader};
 use onion::{OnionRouter, OnionRoute, RouteHop, OnionPacket, OnionError, RouteBuilder};
 use transport::{WirePacket, AddressTranslator, UniversalAddress};
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CryptoError {
@@ -55,6 +57,7 @@ pub enum CryptoError {
     BufferOverflow,
 }
 
+
 pub enum DecryptResult {
 
     Plaintext(heapless::Vec<u8, 256>),
@@ -65,59 +68,88 @@ pub enum DecryptResult {
     },
 }
 
+
 const FIRMWARE_VERSION: &str = "LunarCore v1.0.0";
+
 
 const BAUD_RATE: u32 = 115200;
 
+
 const RX_BUFFER_SIZE: usize = 512;
+
 
 const DEFAULT_FREQUENCY: u32 = 915_000_000;
 
+
 const BATTERY_DIVIDER_RATIO: f32 = 4.9;
+
 
 const ADC_VREF_MV: u32 = 3300;
 
+
 const ADC_MAX_VALUE: u32 = 4095;
+
 
 const BATTERY_LOW_MV: u32 = 3400;
 
+
 const BATTERY_CRITICAL_MV: u32 = 3200;
 
+
 const WATCHDOG_TIMEOUT_SEC: u32 = 30;
+
 
 const LED_BLINK_IDLE: u32 = 2000;
 const LED_BLINK_ACTIVE: u32 = 500;
 const LED_BLINK_ERROR: u32 = 100;
 
+
 const PIN_SPI_MOSI: i32 = 10;
 const PIN_SPI_MISO: i32 = 11;
 const PIN_SPI_SCK: i32 = 9;
+
 
 const PIN_LORA_NSS: i32 = 8;
 const PIN_LORA_RST: i32 = 12;
 const PIN_LORA_BUSY: i32 = 13;
 const PIN_LORA_DIO1: i32 = 14;
 
+
 const PIN_LED: i32 = 35;
 const PIN_VEXT: i32 = 36;
 
+
 const PIN_BATTERY_ADC: i32 = 1;
+
 
 const PIN_I2C_SDA: i32 = 17;
 const PIN_I2C_SCL: i32 = 18;
 const PIN_OLED_RST: i32 = 21;
 
+
 static DIO1_TRIGGERED: AtomicBool = AtomicBool::new(false);
+
+
+static DIO1_COUNT: AtomicU32 = AtomicU32::new(0);
+
+
+static DIO1_IRQ_SEEN: AtomicU16 = AtomicU16::new(0);
+
 
 static PACKET_PENDING: AtomicBool = AtomicBool::new(false);
 
+
 static TX_COMPLETE: AtomicBool = AtomicBool::new(false);
+
 
 static SYSTEM_TICKS: AtomicU32 = AtomicU32::new(0);
 
+
 static LAST_ACTIVITY: AtomicU32 = AtomicU32::new(0);
 
+
 static ERROR_COUNT: AtomicU32 = AtomicU32::new(0);
+
 
 #[derive(Clone)]
 struct NodeIdentity {
@@ -133,19 +165,24 @@ struct NodeIdentity {
     private_key: [u8; 32],
 }
 
+
 const NVS_NAMESPACE: &str = "lunarcore";
 const NVS_KEY_NODE_ID: &str = "node_id";
 const NVS_KEY_PRIVATE_KEY: &str = "priv_key";
 
 impl NodeIdentity {
 
+
     fn from_hardware() -> Self {
 
         let mac_address = Self::read_mac_address();
 
+
         let hardware_serial = Self::read_hardware_serial();
 
+
         let (node_id, private_key) = Self::load_or_create_identity(&hardware_serial);
+
 
         let public_key = crypto::ed25519::Ed25519::public_key(&private_key);
 
@@ -157,6 +194,7 @@ impl NodeIdentity {
             private_key,
         }
     }
+
 
     fn load_or_create_identity(hardware_serial: &[u8; 8]) -> (u32, [u8; 32]) {
 
@@ -215,11 +253,15 @@ impl NodeIdentity {
                 return (node_id, private_key);
             }
 
+
             log::info!("Creating new random node identity (privacy-first)");
+
 
             node_id = Self::generate_random_node_id();
 
+
             private_key = Self::generate_random_private_key(hardware_serial);
+
 
             unsafe {
                 esp_idf_sys::nvs_set_u32(handle, node_id_key.as_ptr(), node_id);
@@ -244,6 +286,7 @@ impl NodeIdentity {
         }
     }
 
+
     fn generate_random_node_id() -> u32 {
         let mut random_bytes = [0u8; 4];
         unsafe {
@@ -254,17 +297,21 @@ impl NodeIdentity {
         id | 0x80000000
     }
 
+
     fn generate_random_private_key(hardware_serial: &[u8; 8]) -> [u8; 32] {
         let mut random_bytes = [0u8; 32];
         unsafe {
             esp_idf_sys::esp_fill_random(random_bytes.as_mut_ptr() as *mut _, 32);
         }
 
+
         let mut seed_input = [0u8; 40];
         seed_input[0..32].copy_from_slice(&random_bytes);
         seed_input[32..40].copy_from_slice(hardware_serial);
 
+
         let mut private_key = Sha256::hash(&seed_input);
+
 
         private_key[0] &= 248;
         private_key[31] &= 127;
@@ -272,6 +319,7 @@ impl NodeIdentity {
 
         private_key
     }
+
 
     #[allow(dead_code)]
     fn factory_reset() -> Option<Self> {
@@ -283,8 +331,10 @@ impl NodeIdentity {
 
         log::info!("Factory reset: erased old identity, generating new one");
 
+
         Some(Self::from_hardware())
     }
+
 
     fn read_mac_address() -> [u8; 6] {
         let mut mac = [0u8; 6];
@@ -297,10 +347,12 @@ impl NodeIdentity {
         mac
     }
 
+
     fn read_hardware_serial() -> [u8; 8] {
         let mut serial = [0u8; 8];
 
         unsafe {
+
 
             let efuse_base: *const u32 = 0x6001A044 as *const u32;
             let word0 = core::ptr::read_volatile(efuse_base);
@@ -313,11 +365,13 @@ impl NodeIdentity {
         serial
     }
 
+
     fn x25519_pubkey(&self) -> [u8; 32] {
         use crypto::x25519;
         x25519::x25519_base(&self.private_key)
     }
 }
+
 
 struct BatteryState {
 
@@ -343,20 +397,27 @@ impl BatteryState {
         }
     }
 
+
     fn update(&mut self, adc_value: u32) {
+
 
         let vadc_mv = (adc_value * ADC_VREF_MV) / ADC_MAX_VALUE;
         self.voltage_mv = ((vadc_mv as f32) * BATTERY_DIVIDER_RATIO) as u32;
 
+
         self.percentage = Self::voltage_to_percentage(self.voltage_mv);
+
 
         self.is_low = self.voltage_mv < BATTERY_LOW_MV;
         self.is_critical = self.voltage_mv < BATTERY_CRITICAL_MV;
 
+
         self.is_charging = self.voltage_mv > 4200;
     }
 
+
     fn voltage_to_percentage(mv: u32) -> u8 {
+
 
         const CURVE: [(u32, u8); 11] = [
             (4200, 100),
@@ -379,6 +440,7 @@ impl BatteryState {
             return 0;
         }
 
+
         for i in 0..10 {
             if mv >= CURVE[i + 1].0 && mv <= CURVE[i].0 {
                 let v_range = CURVE[i].0 - CURVE[i + 1].0;
@@ -392,6 +454,7 @@ impl BatteryState {
         50
     }
 }
+
 
 struct Stats {
 
@@ -435,6 +498,7 @@ impl Stats {
         }
     }
 
+
     fn record_rx(&mut self, len: usize, rssi: i16, snr: i8) {
         self.rx_packets += 1;
         self.rx_bytes += len as u64;
@@ -442,12 +506,14 @@ impl Stats {
         self.last_snr = snr;
     }
 
+
     fn record_tx(&mut self, len: usize, airtime_ms: u32) {
         self.tx_packets += 1;
         self.tx_bytes += len as u64;
         self.airtime_ms += airtime_ms as u64;
     }
 }
+
 
 struct LedController {
 
@@ -473,26 +539,31 @@ impl LedController {
         }
     }
 
+
     fn set_idle(&mut self) {
         self.interval_ms = LED_BLINK_IDLE;
         self.blink_count = 0;
     }
+
 
     fn set_active(&mut self) {
         self.interval_ms = LED_BLINK_ACTIVE;
         self.blink_count = 0;
     }
 
+
     fn set_error(&mut self) {
         self.interval_ms = LED_BLINK_ERROR;
         self.blink_count = 0;
     }
+
 
     fn flash(&mut self, count: u8) {
         self.blink_count = count;
         self.remaining = count * 2;
         self.interval_ms = 100;
     }
+
 
     fn update(&mut self, current_time: u32) -> bool {
         if current_time.wrapping_sub(self.last_toggle) >= self.interval_ms {
@@ -515,6 +586,111 @@ impl LedController {
         false
     }
 }
+
+
+fn load_repeater_setting() -> bool {
+    unsafe {
+        let mut handle: esp_idf_sys::nvs_handle_t = 0;
+        let namespace = core::ffi::CStr::from_bytes_with_nul(b"lunarcore\0").unwrap();
+        let err = esp_idf_sys::nvs_open(
+            namespace.as_ptr(),
+            esp_idf_sys::nvs_open_mode_t_NVS_READONLY,
+            &mut handle,
+        );
+        if err != esp_idf_sys::ESP_OK {
+            return true;
+        }
+
+        let key = core::ffi::CStr::from_bytes_with_nul(b"repeater\0").unwrap();
+        let mut val: u8 = 1;
+        let result = esp_idf_sys::nvs_get_u8(handle, key.as_ptr(), &mut val);
+        esp_idf_sys::nvs_close(handle);
+
+        if result == esp_idf_sys::ESP_OK {
+            val != 0
+        } else {
+            true
+        }
+    }
+}
+
+
+fn save_repeater_setting(enabled: bool) {
+    unsafe {
+        let mut handle: esp_idf_sys::nvs_handle_t = 0;
+        let namespace = core::ffi::CStr::from_bytes_with_nul(b"lunarcore\0").unwrap();
+        let err = esp_idf_sys::nvs_open(
+            namespace.as_ptr(),
+            esp_idf_sys::nvs_open_mode_t_NVS_READWRITE,
+            &mut handle,
+        );
+        if err != esp_idf_sys::ESP_OK {
+            return;
+        }
+
+        let key = core::ffi::CStr::from_bytes_with_nul(b"repeater\0").unwrap();
+        esp_idf_sys::nvs_set_u8(handle, key.as_ptr(), if enabled { 1 } else { 0 });
+        esp_idf_sys::nvs_commit(handle);
+        esp_idf_sys::nvs_close(handle);
+    }
+}
+
+
+const DEDUP_RING_SIZE: usize = 32;
+
+struct DeduplicatorRing {
+    hashes: [u32; DEDUP_RING_SIZE],
+    head: usize,
+    count: usize,
+}
+
+impl DeduplicatorRing {
+    fn new() -> Self {
+        Self {
+            hashes: [0u32; DEDUP_RING_SIZE],
+            head: 0,
+            count: 0,
+        }
+    }
+
+
+    fn check_and_insert(&mut self, data: &[u8]) -> bool {
+        let hash = Self::fingerprint(data);
+
+
+        let entries = self.count.min(DEDUP_RING_SIZE);
+        for i in 0..entries {
+            if self.hashes[i] == hash {
+                return false;
+            }
+        }
+
+
+        self.hashes[self.head] = hash;
+        self.head = (self.head + 1) % DEDUP_RING_SIZE;
+        if self.count < DEDUP_RING_SIZE {
+            self.count += 1;
+        }
+
+        true
+    }
+
+
+    fn clear(&mut self) {
+        self.hashes = [0u32; DEDUP_RING_SIZE];
+        self.head = 0;
+        self.count = 0;
+    }
+
+
+    fn fingerprint(data: &[u8]) -> u32 {
+        let mid = data.len() / 2;
+        let hi = protocol::crc16(&data[..mid]) as u32;
+        let lo = protocol::crc16(&data[mid..]) as u32;
+        (hi << 16) | lo
+    }
+}
+
 
 struct LunarCore<SPI, NSS, RESET, BUSY, DIO1> {
 
@@ -548,6 +724,18 @@ struct LunarCore<SPI, NSS, RESET, BUSY, DIO1> {
 
     at_buffer: Vec<u8, 128>,
 
+    last_serial_rx: u32,
+
+    prev_ble_connections: u16,
+
+
+    repeater_enabled: bool,
+
+    dedup: DeduplicatorRing,
+
+    relay_count: u32,
+
+
     session_manager: SessionManager,
 
     onion_router: OnionRouter,
@@ -568,6 +756,7 @@ where
     fn new(radio: Sx1262<SPI, NSS, RESET, BUSY, DIO1>, identity: NodeIdentity) -> Self {
         let node_id = identity.node_id;
 
+
         let x25519_private = {
             let mut key = identity.private_key;
 
@@ -577,7 +766,9 @@ where
             key
         };
 
+
         let onion_router = OnionRouter::new(x25519_private);
+
 
         let our_address = AddressTranslator::from_public_key(&identity.public_key);
 
@@ -597,6 +788,12 @@ where
             vext_enabled: true,
             last_battery_check: 0,
             at_buffer: Vec::new(),
+            last_serial_rx: 0,
+            prev_ble_connections: 0,
+
+            repeater_enabled: true,
+            dedup: DeduplicatorRing::new(),
+            relay_count: 0,
 
             session_manager: SessionManager::new(),
             onion_router,
@@ -605,9 +802,11 @@ where
         }
     }
 
+
     fn identity(&self) -> &NodeIdentity {
         &self.identity
     }
+
 
     fn update_battery(&mut self, adc_value: u32) {
         self.battery.update(adc_value);
@@ -620,11 +819,98 @@ where
         }
     }
 
+
+    fn app_connected(&self) -> bool {
+        self.serial_protocol != Protocol::Unknown || self.ble.connection_count() > 0
+    }
+
+
+    fn repeater_active(&self) -> bool {
+        self.repeater_enabled && !self.app_connected()
+    }
+
+
+    fn reset_protocol(&mut self) {
+        let prev = self.serial_protocol;
+        if prev == Protocol::Unknown {
+            return;
+        }
+
+        self.serial_protocol = Protocol::Unknown;
+
+
+        self.router.transport(TransportType::UsbSerial).detector.reset();
+
+
+        self.meshcore_parser.reset();
+        self.meshtastic.reset_parser();
+        self.rnode.reset_parser();
+
+
+        self.at_buffer.clear();
+        self.dedup.clear();
+
+        self.stats.protocol_switches += 1;
+        log::info!("Protocol reset: {} -> Detecting", prev.name());
+    }
+
+
+    fn maybe_relay_packet(&mut self, data: &[u8], now: u32) -> bool {
+        if !self.repeater_active() {
+            return false;
+        }
+
+
+        if data.len() >= 4 && &data[..4] == b"TEST" {
+            return false;
+        }
+
+
+        if data.len() < 4 {
+            return false;
+        }
+
+
+        if !self.dedup.check_and_insert(data) {
+            return false;
+        }
+
+
+        let jitter = 20 + ((self.identity.node_id ^ now) % 81);
+        let mut waited = 0u32;
+        while waited < jitter {
+            FreeRtos::delay_ms(1);
+            waited += 1;
+        }
+
+
+        self.rx_active = false;
+        if self.radio.transmit(data).is_ok() {
+            self.relay_count += 1;
+            self.stats.tx_packets += 1;
+            self.rx_active = true;
+            log::info!("Relayed packet ({} bytes), total relays: {}", data.len(), self.relay_count);
+            true
+        } else {
+
+            let _ = self.radio.start_rx(0);
+            self.rx_active = true;
+            false
+        }
+    }
+
+
     fn handle_dio1_interrupt(&mut self) {
 
         DIO1_TRIGGERED.store(false, Ordering::Relaxed);
 
+
+        DIO1_COUNT.fetch_add(1, Ordering::Relaxed);
+
+
         if let Ok(irq_status) = self.radio.get_irq_status() {
+
+            DIO1_IRQ_SEEN.store(irq_status, Ordering::Relaxed);
             if irq_status & 0x01 != 0 {
 
                 TX_COMPLETE.store(true, Ordering::Release);
@@ -644,11 +930,13 @@ where
                 ERROR_COUNT.fetch_add(1, Ordering::Relaxed);
             }
 
+
             let _ = self.radio.clear_irq(irq_status);
         }
     }
 
-    fn process_radio_events(&mut self) {
+
+    fn process_radio_events(&mut self, uart: &UartDriver) {
 
         if TX_COMPLETE.swap(false, Ordering::Acquire) {
 
@@ -658,10 +946,30 @@ where
             self.led.flash(1);
         }
 
+
         if PACKET_PENDING.swap(false, Ordering::Acquire) {
-            self.led.flash(2);
+
+            match self.radio.read_packet() {
+                Ok((data, rssi, snr)) => {
+                    self.stats.rx_packets += 1;
+                    self.stats.last_rssi = rssi;
+                    self.route_rx_packet(&data, rssi, snr, uart);
+                    let now = millis();
+                    if self.maybe_relay_packet(&data, now) {
+                        self.led.flash(3);
+                    } else {
+                        self.led.flash(2);
+                    }
+                }
+                Err(_) => {
+                    self.stats.rx_errors += 1;
+                }
+            }
+
+            let _ = self.radio.start_rx(0);
         }
     }
+
 
     fn process_at_command(&mut self, uart: &UartDriver) {
 
@@ -672,7 +980,9 @@ where
         }
         let cmd = &cmd_upper[..len];
 
+
         let _ = uart.write(b"\r\n");
+
 
         if cmd.starts_with(b"AT+VERSION") || cmd.starts_with(b"ATI") {
 
@@ -689,10 +999,12 @@ where
                 let _ = uart.write(b"Idle\r\n");
             }
 
+
             let mut buf = [0u8; 32];
             let s = format_battery(&self.battery, &mut buf);
             let _ = uart.write(s.as_bytes());
             let _ = uart.write(b"\r\n");
+
 
             let _ = uart.write(b"TX: ");
             write_u32(uart, self.stats.tx_packets);
@@ -793,6 +1105,46 @@ where
             } else {
                 let _ = uart.write(b"ERROR\r\n");
             }
+        } else if cmd.starts_with(b"AT+SWITCH") {
+
+            self.reset_protocol();
+            let _ = uart.write(b"Protocol reset: Detecting...\r\n");
+            let _ = uart.write(b"OK\r\n");
+        } else if cmd.starts_with(b"AT+REPEATER=") {
+
+            if cmd.len() > 12 {
+                match cmd[12] {
+                    b'1' => {
+                        self.repeater_enabled = true;
+                        save_repeater_setting(true);
+                        let _ = uart.write(b"Repeater: ON\r\n");
+                        let _ = uart.write(b"OK\r\n");
+                    }
+                    b'0' => {
+                        self.repeater_enabled = false;
+                        save_repeater_setting(false);
+                        self.dedup.clear();
+                        let _ = uart.write(b"Repeater: OFF\r\n");
+                        let _ = uart.write(b"OK\r\n");
+                    }
+                    _ => {
+                        let _ = uart.write(b"ERROR: Use 0 or 1\r\n");
+                    }
+                }
+            } else {
+                let _ = uart.write(b"ERROR: Use AT+REPEATER=0 or AT+REPEATER=1\r\n");
+            }
+        } else if cmd.starts_with(b"AT+REPEATER") {
+
+            let _ = uart.write(b"Repeater: ");
+            if self.repeater_enabled {
+                let _ = uart.write(b"ON");
+            } else {
+                let _ = uart.write(b"OFF");
+            }
+            let _ = uart.write(b"\r\nRelayed: ");
+            write_u32(uart, self.relay_count);
+            let _ = uart.write(b"\r\nOK\r\n");
         } else if cmd == b"AT" {
 
             let _ = uart.write(b"OK\r\n");
@@ -810,13 +1162,19 @@ where
             let _ = uart.write(b"  AT+RX       - Start RX mode\r\n");
             let _ = uart.write(b"  AT+RSSI     - Get RSSI\r\n");
             let _ = uart.write(b"  AT+RESET    - Reset radio\r\n");
+            let _ = uart.write(b"  AT+SWITCH   - Reset protocol detection\r\n");
+            let _ = uart.write(b"  AT+REPEATER - Repeater status\r\n");
+            let _ = uart.write(b"  AT+REPEATER=n - Enable(1)/disable(0)\r\n");
             let _ = uart.write(b"OK\r\n");
         } else {
             let _ = uart.write(b"ERROR: Unknown command\r\n");
         }
     }
 
+
     fn process_serial_byte(&mut self, byte: u8, uart: &UartDriver) {
+        self.last_serial_rx = millis();
+
 
         if self.serial_protocol == Protocol::Unknown {
             if let Some(protocol) = self.router.transport(TransportType::UsbSerial)
@@ -826,9 +1184,35 @@ where
                 self.stats.protocol_switches += 1;
                 log::info!("Protocol detected: {}", protocol.name());
 
+
                 self.configure_radio_for_protocol(protocol);
+
+
+                match protocol {
+                    Protocol::MeshCore => {
+
+
+                        self.meshcore_parser.feed(0xAA);
+                    }
+                    Protocol::Meshtastic => {
+
+
+                        self.meshtastic.feed_serial(0x94);
+                    }
+                    Protocol::RNode => {
+
+
+                    }
+                    Protocol::AtCommand => {
+
+
+                        let _ = self.at_buffer.push(b'A');
+                    }
+                    Protocol::Unknown => {}
+                }
             }
         }
+
 
         match self.serial_protocol {
             Protocol::MeshCore => {
@@ -874,16 +1258,17 @@ where
         }
     }
 
+
     fn configure_radio_for_protocol(&mut self, protocol: Protocol) {
         let config = match protocol {
             Protocol::MeshCore => RadioConfig {
-                frequency: 915_000_000,
-                spreading_factor: 9,
-                bandwidth: 0,
+                frequency: 910_525_000,
+                spreading_factor: 7,
+                bandwidth: 0x03,
                 coding_rate: 1,
                 tx_power: 14,
                 sync_word: 0x12,
-                preamble_length: 8,
+                preamble_length: 16,
                 crc_enabled: true,
                 implicit_header: false,
                 ldro: false,
@@ -891,7 +1276,7 @@ where
             Protocol::Meshtastic => RadioConfig {
                 frequency: 906_875_000,
                 spreading_factor: 11,
-                bandwidth: 0,
+                bandwidth: 0x04,
                 coding_rate: 1,
                 tx_power: 17,
                 sync_word: 0x2B,
@@ -907,10 +1292,11 @@ where
                     frequency: cfg.frequency,
                     spreading_factor: cfg.spreading_factor,
                     bandwidth: match cfg.bandwidth {
-                        125_000 => 0,
-                        250_000 => 1,
-                        500_000 => 2,
-                        _ => 0,
+                        125_000 => 0x04,
+                        250_000 => 0x05,
+                        500_000 => 0x06,
+                        62_500 => 0x03,
+                        _ => 0x04,
                     },
                     coding_rate: cfg.coding_rate.saturating_sub(4),
                     tx_power: cfg.tx_power,
@@ -930,6 +1316,7 @@ where
 
         self.router.set_lora_protocol(protocol);
     }
+
 
     fn handle_meshcore_frame(&mut self, frame: &Frame, uart: &UartDriver) {
         match frame.command {
@@ -974,6 +1361,10 @@ where
                         if let Some(response) = protocol::build_tx_error(frame.sequence, code) {
                             self.send_frame(uart, &response);
                         }
+
+                        if self.radio.start_rx(0).is_ok() {
+                            self.rx_active = true;
+                        }
                     }
                 }
             }
@@ -1013,12 +1404,14 @@ where
             }
         }
 
+
         if !self.rx_active && self.radio.state() == RadioState::Standby {
             if self.radio.start_rx(0).is_ok() {
                 self.rx_active = true;
             }
         }
     }
+
 
     fn handle_meshtastic_frame(&mut self, frame: &MeshtasticFrame, uart: &UartDriver) {
 
@@ -1034,6 +1427,10 @@ where
                     }
                     Err(_) => {
                         self.stats.tx_errors += 1;
+
+                        if self.radio.start_rx(0).is_ok() {
+                            self.rx_active = true;
+                        }
                     }
                 }
             }
@@ -1041,6 +1438,7 @@ where
             Some(meshtastic::ToRadioResponse::FromRadio(response)) => {
 
                 self.send_meshtastic_response(&response, uart);
+
 
                 self.flush_meshtastic_responses(uart);
             }
@@ -1050,6 +1448,7 @@ where
             }
         }
 
+
         if !self.rx_active {
             if self.radio.start_rx(0).is_ok() {
                 self.rx_active = true;
@@ -1057,28 +1456,35 @@ where
         }
     }
 
+
     fn send_meshtastic_response(&mut self, response: &[u8], uart: &UartDriver) {
 
         if let Some(serial_frame) = self.meshtastic.build_serial_frame(response) {
             let _ = uart.write(&serial_frame);
         }
 
+
         let _ = self.ble.queue_from_radio(response);
+
 
         self.meshtastic.rx_count = self.meshtastic.rx_count.wrapping_add(1);
         let _ = self.ble.notify_from_num(self.meshtastic.rx_count);
     }
 
+
     fn flush_meshtastic_responses(&mut self, uart: &UartDriver) {
+
 
         while let Some(meshtastic::ToRadioResponse::FromRadio(response)) =
             self.meshtastic.poll_pending_response()
         {
             self.send_meshtastic_response(&response, uart);
 
+
             FreeRtos::delay_ms(10);
         }
     }
+
 
     fn handle_rnode_frame(&mut self, frame: &KissFrame, uart: &UartDriver) {
 
@@ -1087,6 +1493,7 @@ where
             let encoded = response.encode();
             let _ = uart.write(&encoded);
         }
+
 
         if frame.command == KissCommand::DataFrame as u8 {
             if let Some(tx_data) = self.rnode.get_tx_data(frame) {
@@ -1099,10 +1506,15 @@ where
                     }
                     Err(_) => {
                         self.stats.tx_errors += 1;
+
+                        if self.radio.start_rx(0).is_ok() {
+                            self.rx_active = true;
+                        }
                     }
                 }
             }
         }
+
 
         if self.rnode.is_online() && !self.rx_active {
             if self.radio.start_rx(0).is_ok() {
@@ -1110,6 +1522,7 @@ where
             }
         }
     }
+
 
     fn check_rx(&mut self, uart: &UartDriver) {
         if !self.rx_active {
@@ -1120,6 +1533,8 @@ where
             Ok(Some((data, rssi, snr))) => {
                 self.stats.rx_packets += 1;
                 self.route_rx_packet(&data, rssi, snr, uart);
+
+                let _ = self.radio.start_rx(0);
             }
             Ok(None) => {
 
@@ -1133,9 +1548,12 @@ where
             }
             Err(_) => {
                 self.stats.rx_errors += 1;
+
+                let _ = self.radio.start_rx(0);
             }
         }
     }
+
 
     fn route_rx_packet(&mut self, data: &[u8], rssi: i16, snr: i8, uart: &UartDriver) {
         match self.serial_protocol {
@@ -1153,6 +1571,7 @@ where
                             let _ = uart.write(&serial_frame);
                         }
 
+
                         let _ = self.ble.notify_from_num(self.meshtastic.rx_count);
                     }
                 }
@@ -1166,14 +1585,20 @@ where
 
             _ => {
 
+
+                if let Some(frame) = protocol::build_receive(rssi, snr, data) {
+                    self.send_frame(uart, &frame);
+                }
             }
         }
     }
+
 
     fn send_frame(&self, uart: &UartDriver, frame: &Frame) {
         let encoded = frame.encode();
         let _ = uart.write(&encoded);
     }
+
 
     fn encrypt_for_tx(
         &mut self,
@@ -1185,6 +1610,7 @@ where
         let session = match self.session_manager.get_session(recipient_public) {
             Some(s) => s,
             None => {
+
 
                 let our_x25519 = crypto::x25519::x25519_base(&self.identity.private_key);
                 let shared = crypto::x25519::x25519(&self.identity.private_key, recipient_public);
@@ -1203,14 +1629,17 @@ where
             }
         };
 
+
         let (header, ciphertext) = session.encrypt(plaintext)
             .map_err(|_| CryptoError::EncryptionFailed)?;
+
 
         let mut session_encrypted = Vec::<u8, 256>::new();
         session_encrypted.extend_from_slice(&header.encode())
             .map_err(|_| CryptoError::BufferOverflow)?;
         session_encrypted.extend_from_slice(&ciphertext)
             .map_err(|_| CryptoError::BufferOverflow)?;
+
 
         let payload_for_wire = if use_onion && self.route_builder.relay_count() >= 3 {
 
@@ -1232,6 +1661,7 @@ where
             session_encrypted
         };
 
+
         let dest_address = AddressTranslator::from_public_key(recipient_public);
         let epoch = (millis() / 1000) as u64;
         let session_hint_bytes = session.derive_session_hint(epoch);
@@ -1240,6 +1670,7 @@ where
             | ((session_hint_bytes[1] as u32) << 16)
             | ((session_hint_bytes[2] as u32) << 8)
             | (session_hint_bytes[3] as u32);
+
 
         let mut payload_truncated = Vec::<u8, 214>::new();
         let copy_len = core::cmp::min(payload_for_wire.len(), 214);
@@ -1258,6 +1689,7 @@ where
         Ok(output)
     }
 
+
     fn decrypt_from_rx(
         &mut self,
         wire_data: &[u8],
@@ -1267,9 +1699,11 @@ where
         let wire_packet = WirePacket::decode(wire_data)
             .ok_or(CryptoError::InvalidFormat)?;
 
+
         let is_for_us = wire_packet.next_hop_hint == self.our_address.meshcore_addr;
 
         if !is_for_us {
+
 
             let mut expanded_payload = heapless::Vec::<u8, 256>::new();
             let _ = expanded_payload.extend_from_slice(&wire_packet.payload);
@@ -1281,6 +1715,7 @@ where
 
             match self.onion_router.unwrap(&onion_packet, sender_public) {
                 Ok((next_hint, inner_packet)) => {
+
 
                     let mut truncated = heapless::Vec::<u8, 214>::new();
                     let copy_len = core::cmp::min(inner_packet.data.len(), 214);
@@ -1310,8 +1745,10 @@ where
             }
         }
 
+
         let mut session_encrypted = heapless::Vec::<u8, 256>::new();
         let _ = session_encrypted.extend_from_slice(&wire_packet.payload);
+
 
         if session_encrypted.len() < 48 {
             return Err(CryptoError::InvalidFormat);
@@ -1330,26 +1767,36 @@ where
         Ok(DecryptResult::Plaintext(plaintext))
     }
 
+
     fn add_relay(&mut self, hint: u16, public_key: [u8; 32]) {
         self.route_builder.add_relay(hint, public_key);
     }
+
 
     fn relay_count(&self) -> usize {
         self.route_builder.relay_count()
     }
 }
 
+
 fn dio1_isr() {
+
+    DIO1_COUNT.fetch_add(1, Ordering::Relaxed);
     DIO1_TRIGGERED.store(true, Ordering::Release);
 }
+
 
 fn timer_tick_isr() {
     SYSTEM_TICKS.fetch_add(1, Ordering::Relaxed);
 }
 
+
 fn millis() -> u32 {
-    SYSTEM_TICKS.load(Ordering::Relaxed)
+
+
+    unsafe { esp_idf_sys::xTaskGetTickCount() as u32 }
 }
+
 
 fn init_watchdog() {
     unsafe {
@@ -1364,24 +1811,29 @@ fn init_watchdog() {
     }
 }
 
+
 fn feed_watchdog() {
     unsafe {
         esp_idf_sys::esp_task_wdt_reset();
     }
 }
 
+
 fn format_battery<'a>(battery: &BatteryState, buf: &'a mut [u8; 32]) -> &'a str {
     let mut idx = 0;
+
 
     let prefix = b"Battery: ";
     buf[idx..idx + prefix.len()].copy_from_slice(prefix);
     idx += prefix.len();
+
 
     idx += write_u32_to_buf(battery.voltage_mv, &mut buf[idx..]);
 
     let suffix = b"mV (";
     buf[idx..idx + suffix.len()].copy_from_slice(suffix);
     idx += suffix.len();
+
 
     idx += write_u32_to_buf(battery.percentage as u32, &mut buf[idx..]);
 
@@ -1391,6 +1843,7 @@ fn format_battery<'a>(battery: &BatteryState, buf: &'a mut [u8; 32]) -> &'a str 
 
     core::str::from_utf8(&buf[..idx]).unwrap_or("Battery: ???")
 }
+
 
 fn write_u32_to_buf(val: u32, buf: &mut [u8]) -> usize {
     if val == 0 {
@@ -1415,11 +1868,13 @@ fn write_u32_to_buf(val: u32, buf: &mut [u8]) -> usize {
     count
 }
 
+
 fn write_u32(uart: &UartDriver, val: u32) {
     let mut buf = [0u8; 10];
     let len = write_u32_to_buf(val, &mut buf);
     let _ = uart.write(&buf[..len]);
 }
+
 
 fn write_i16(uart: &UartDriver, val: i16) {
     if val < 0 {
@@ -1430,11 +1885,13 @@ fn write_i16(uart: &UartDriver, val: i16) {
     }
 }
 
+
 fn write_hex8(uart: &UartDriver, val: u8) {
     const HEX: &[u8] = b"0123456789ABCDEF";
     let buf = [HEX[(val >> 4) as usize], HEX[(val & 0xF) as usize]];
     let _ = uart.write(&buf);
 }
+
 
 fn write_hex32(uart: &UartDriver, val: u32) {
     const HEX: &[u8] = b"0123456789ABCDEF";
@@ -1444,6 +1901,7 @@ fn write_hex32(uart: &UartDriver, val: u32) {
     }
     let _ = uart.write(&buf);
 }
+
 
 fn parse_u32_from_cmd(bytes: &[u8]) -> Option<u32> {
     let mut result: u32 = 0;
@@ -1460,6 +1918,7 @@ fn parse_u32_from_cmd(bytes: &[u8]) -> Option<u32> {
 
     if found_digit { Some(result) } else { None }
 }
+
 
 fn parse_i8_from_cmd(bytes: &[u8]) -> Option<i8> {
     let mut result: i32 = 0;
@@ -1492,27 +1951,40 @@ fn parse_i8_from_cmd(bytes: &[u8]) -> Option<i8> {
     }
 }
 
+
+unsafe extern "C" fn null_vprintf(
+    _fmt: *const core::ffi::c_char,
+    _args: esp_idf_sys::va_list,
+) -> core::ffi::c_int {
+    0
+}
+
 fn main() -> ! {
 
     esp_idf_sys::link_patches();
 
+
+    unsafe {
+        esp_idf_sys::esp_log_level_set(b"*\0".as_ptr() as *const _, esp_idf_sys::esp_log_level_t_ESP_LOG_NONE);
+    }
+
+
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    log::info!("========================================");
-    log::info!("  LunarCore Mesh Firmware v1.0.0");
-    log::info!("  Pure Rust Cryptography Stack");
-    log::info!("  Cypherpunk / Lunarpunk Design");
-    log::info!("========================================");
 
     run_lunarcore();
 }
 
+
 fn run_lunarcore() -> ! {
+
 
     let identity = NodeIdentity::from_hardware();
     log::info!("[INIT] Node ID: {:08X}", identity.node_id);
 
+
     let peripherals = Peripherals::take().unwrap();
+
 
     let mut led_pin = PinDriver::output(peripherals.pins.gpio35).unwrap();
     led_pin.set_low().unwrap();
@@ -1520,6 +1992,7 @@ fn run_lunarcore() -> ! {
     vext_pin.set_low().unwrap();
     drop(vext_pin);
     log::info!("[INIT] GPIO OK");
+
 
     let mut oled_rst = PinDriver::output(peripherals.pins.gpio21).unwrap();
     oled_rst.set_low().unwrap();
@@ -1537,7 +2010,9 @@ fn run_lunarcore() -> ! {
     let _ = status_display.init();
     log::info!("[INIT] OLED OK");
 
+
     let _ = status_display.boot_animation(&mut |ms| FreeRtos::delay_ms(ms));
+
 
     let spi_config = esp_idf_hal::spi::config::Config::new()
         .baudrate(Hertz(8_000_000))
@@ -1556,12 +2031,15 @@ fn run_lunarcore() -> ! {
     let busy = PinDriver::input(peripherals.pins.gpio13).unwrap();
     let mut dio1 = PinDriver::input(peripherals.pins.gpio14).unwrap();
     dio1.set_pull(Pull::Down).unwrap();
+    dio1.set_interrupt_type(esp_idf_hal::gpio::InterruptType::PosEdge).unwrap();
     log::info!("[INIT] SPI OK");
+
 
     unsafe {
         dio1.subscribe(dio1_isr).unwrap();
     }
     dio1.enable_interrupt().unwrap();
+
 
     let mut radio = Sx1262::new(spi, nss, reset, busy, dio1);
     match radio.init() {
@@ -1569,8 +2047,11 @@ fn run_lunarcore() -> ! {
         Err(e) => log::error!("[INIT] SX1262 FAILED: {:?}", e),
     }
 
+
     let mut lunarcore = LunarCore::new(radio, identity);
-    log::info!("[INIT] LunarCore OK");
+    lunarcore.repeater_enabled = load_repeater_setting();
+    log::info!("[INIT] LunarCore OK (repeater: {})", if lunarcore.repeater_enabled { "ON" } else { "OFF" });
+
 
     match lunarcore.ble.init("LunarCore") {
         Ok(()) => {
@@ -1579,6 +2060,7 @@ fn run_lunarcore() -> ! {
         }
         Err(e) => log::error!("[INIT] BLE FAILED: {:?}", e),
     }
+
 
     let uart_config = esp_idf_hal::uart::config::Config::default()
         .baudrate(Hertz(BAUD_RATE));
@@ -1592,7 +2074,9 @@ fn run_lunarcore() -> ! {
     ).unwrap();
     log::info!("[INIT] UART OK");
 
+
     init_watchdog();
+
 
     let adc1 = AdcDriver::new(peripherals.adc1).unwrap();
     let adc_config = AdcChannelConfig {
@@ -1607,19 +2091,65 @@ fn run_lunarcore() -> ! {
     log::info!("  Waiting for protocol detection...");
     log::info!("========================================");
 
+
+    let meshcore_config = RadioConfig {
+        frequency: 910_525_000,
+        spreading_factor: 7,
+        bandwidth: 0x03,
+        coding_rate: 1,
+        tx_power: 14,
+        sync_word: 0x12,
+        preamble_length: 16,
+        crc_enabled: true,
+        implicit_header: false,
+        ldro: false,
+    };
+    if lunarcore.radio.configure(&meshcore_config).is_ok() {
+        log::info!("[INIT] Radio configured for MeshCore (910.525MHz, SF7, 62.5kHz, private sync)");
+    }
+
+
+    if lunarcore.radio.start_rx(0).is_ok() {
+        lunarcore.rx_active = true;
+        log::info!("[INIT] RX mode started - listening for LoRa packets");
+    }
+
+
     let mut last_second = 0u32;
     let mut battery_check_interval = 0u32;
+    let mut last_beacon_time = 0u32;
+
+    let beacon_interval = 3000 + (lunarcore.identity.public_key[0] as u32 % 2000);
+
+    let mut beacon_data = [0u8; 8];
+    beacon_data[0..4].copy_from_slice(b"TEST");
+    beacon_data[4..8].copy_from_slice(&lunarcore.identity.public_key[0..4]);
+
+
+    let mut current_irq: u16 = 0;
+    let mut last_nonzero_irq: u16 = 0;
 
     loop {
         let now = millis();
 
-        feed_watchdog();
 
-        if DIO1_TRIGGERED.load(Ordering::Acquire) {
-            lunarcore.handle_dio1_interrupt();
+        if !lunarcore.app_connected() && now.wrapping_sub(last_beacon_time) >= beacon_interval {
+            last_beacon_time = now;
+
+            lunarcore.rx_active = false;
+            if lunarcore.radio.transmit(&beacon_data).is_ok() {
+                lunarcore.stats.tx_packets += 1;
+
+                lunarcore.rx_active = true;
+            }
         }
 
-        lunarcore.process_radio_events();
+
+        feed_watchdog();
+
+
+        lunarcore.process_radio_events(&uart);
+
 
         let mut byte = [0u8; 1];
         while uart.read(&mut byte, 0).unwrap_or(0) > 0 {
@@ -1627,7 +2157,51 @@ fn run_lunarcore() -> ! {
             LAST_ACTIVITY.store(now, Ordering::Relaxed);
         }
 
-        lunarcore.check_rx(&uart);
+
+        if let Ok(irq) = lunarcore.radio.get_irq_status() {
+            current_irq = irq;
+            if irq != 0 {
+                last_nonzero_irq = irq;
+            }
+
+
+            if irq != 0 {
+
+                if irq & 0x40 != 0 {
+                    lunarcore.stats.rx_errors += 1;
+                }
+
+
+                if (irq & 0x02 != 0) && (irq & 0x40 == 0) {
+                    match lunarcore.radio.read_packet() {
+                        Ok((data, rssi, snr)) => {
+                            lunarcore.stats.rx_packets += 1;
+                            lunarcore.stats.last_rssi = rssi;
+                            lunarcore.route_rx_packet(&data, rssi, snr, &uart);
+
+                            if lunarcore.maybe_relay_packet(&data, now) {
+                                lunarcore.led.flash(3);
+                            } else {
+                                lunarcore.led.flash(2);
+                            }
+                        }
+                        Err(_) => {
+                            lunarcore.stats.rx_errors += 1;
+                        }
+                    }
+                }
+
+
+                let _ = lunarcore.radio.clear_irq(irq);
+
+
+                if (irq & 0x01 != 0) || (irq & 0x02 != 0) {
+                    let _ = lunarcore.radio.start_rx(0);
+                    lunarcore.rx_active = true;
+                }
+            }
+        }
+
 
         if lunarcore.led.update(now) {
             if lunarcore.led.is_on {
@@ -1637,6 +2211,7 @@ fn run_lunarcore() -> ! {
             }
         }
 
+
         if now.wrapping_sub(battery_check_interval) >= 10_000 {
             battery_check_interval = now;
             if let Ok(adc_value) = adc1.read(&mut battery_channel) {
@@ -1644,10 +2219,71 @@ fn run_lunarcore() -> ! {
             }
         }
 
+
+        {
+            let ble_now = lunarcore.ble.connection_count();
+
+
+            if lunarcore.serial_protocol != Protocol::Unknown
+                && ble_now == 0
+                && lunarcore.last_serial_rx > 0
+                && now.wrapping_sub(lunarcore.last_serial_rx) > 30_000
+            {
+                log::info!("Serial idle 30s, resetting protocol");
+                lunarcore.reset_protocol();
+            }
+
+
+            if lunarcore.prev_ble_connections > 0 && ble_now == 0
+                && (lunarcore.last_serial_rx == 0
+                    || now.wrapping_sub(lunarcore.last_serial_rx) > 5_000)
+            {
+                log::info!("BLE disconnected, resetting protocol");
+                lunarcore.reset_protocol();
+            }
+
+            lunarcore.prev_ble_connections = ble_now;
+        }
+
+
         let current_second = now / 1000;
         if current_second > last_second {
             last_second = current_second;
             lunarcore.stats.uptime_seconds = current_second;
+
+
+            if current_second % 2 == 0 {
+                let protocol_name = match lunarcore.serial_protocol {
+                    Protocol::MeshCore => "MeshCore",
+                    Protocol::Meshtastic => "Meshtastic",
+                    Protocol::RNode => "RNode/KISS",
+                    Protocol::AtCommand => "AT Command",
+                    Protocol::Unknown => "Detecting...",
+                };
+
+
+                let (chip_mode, _cmd_status) = lunarcore.radio.get_status().unwrap_or((0, 0));
+                let device_errors = lunarcore.radio.get_errors().unwrap_or(0);
+
+                let status = display::StatusContent {
+                    protocol: protocol_name,
+                    node_id: lunarcore.identity.node_id,
+                    battery_pct: lunarcore.battery.percentage,
+                    rx_count: lunarcore.stats.rx_packets,
+                    tx_count: lunarcore.stats.tx_packets,
+                    rssi: lunarcore.stats.last_rssi,
+                    connected: lunarcore.serial_protocol != Protocol::Unknown,
+                    irq_status: current_irq,
+                    last_irq: last_nonzero_irq,
+                    dio1_count: DIO1_COUNT.load(Ordering::Relaxed),
+                    chip_mode,
+                    device_errors,
+                    repeater_active: lunarcore.repeater_active(),
+                    relay_count: lunarcore.relay_count,
+                };
+                let _ = status_display.show_status(&status);
+            }
+
 
             if current_second % 60 == 0 {
                 log::info!("Uptime: {}s, RX: {}, TX: {}",
@@ -1656,6 +2292,7 @@ fn run_lunarcore() -> ! {
                     lunarcore.stats.tx_packets);
             }
         }
+
 
         FreeRtos::delay_ms(1);
     }

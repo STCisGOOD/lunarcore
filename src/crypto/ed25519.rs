@@ -1,13 +1,18 @@
 use super::sha256::Sha256;
 
+
 pub struct Signature(pub [u8; 64]);
+
 
 pub type PublicKey = [u8; 32];
 
+
 pub type PrivateKey = [u8; 32];
+
 
 #[derive(Clone, Copy)]
 struct Fe([i64; 10]);
+
 
 #[derive(Clone, Copy)]
 struct ExtendedPoint {
@@ -17,6 +22,7 @@ struct ExtendedPoint {
     t: Fe,
 }
 
+
 #[derive(Clone, Copy)]
 struct PrecomputedPoint {
     y_plus_x: Fe,
@@ -24,8 +30,10 @@ struct PrecomputedPoint {
     xy2d: Fe,
 }
 
+
 #[derive(Clone, Copy)]
 struct Scalar([u8; 32]);
+
 
 const BASE_Y: [u8; 32] = [
     0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
@@ -34,15 +42,18 @@ const BASE_Y: [u8; 32] = [
     0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
 ];
 
+
 const D: Fe = Fe([
     -10913610, 13857413, -15372611, 6949391, 114729,
     -8787816, -6275908, -3247719, -18696448, -12055116,
 ]);
 
+
 const D2: Fe = Fe([
     -21827239, -5839606, -30745221, 13898782, 229458,
     15978800, -12551817, -6495438, 29715968, 9444199,
 ]);
+
 
 const SQRT_M1: Fe = Fe([
     -32595792, -7943725, 9377950, 3500415, 12389472,
@@ -429,26 +440,38 @@ impl ExtendedPoint {
         }
     }
 
+
     fn scalar_mul(&self, scalar: &[u8; 32]) -> Self {
 
         let mut r0 = Self::identity();
         let mut r1 = *self;
 
+
         for i in (0..256).rev() {
+
+
+            if i % 4 == 0 {
+                unsafe { esp_idf_sys::vTaskDelay(1); }
+            }
+
             let byte_idx = i / 8;
             let bit_idx = i % 8;
             let bit = ((scalar[byte_idx] >> bit_idx) & 1) as i64;
 
+
             ct_swap(&mut r0, &mut r1, bit);
+
 
             r1 = r0.add(&r1);
             r0 = r0.double();
+
 
             ct_swap(&mut r0, &mut r1, bit);
         }
 
         r0
     }
+
 
     fn ct_select(a: &Self, b: &Self, choice: i64) -> Self {
 
@@ -462,6 +485,7 @@ impl ExtendedPoint {
     }
 }
 
+
 fn ct_swap(a: &mut ExtendedPoint, b: &mut ExtendedPoint, choice: i64) {
     let mask = -(choice as i64);
     fe_ct_swap(&mut a.x, &mut b.x, mask);
@@ -470,6 +494,7 @@ fn ct_swap(a: &mut ExtendedPoint, b: &mut ExtendedPoint, choice: i64) {
     fe_ct_swap(&mut a.t, &mut b.t, mask);
 }
 
+
 fn fe_ct_swap(a: &mut Fe, b: &mut Fe, mask: i64) {
     for i in 0..10 {
         let t = mask & (a.0[i] ^ b.0[i]);
@@ -477,6 +502,7 @@ fn fe_ct_swap(a: &mut Fe, b: &mut Fe, mask: i64) {
         b.0[i] ^= t;
     }
 }
+
 
 fn fe_ct_select(a: &Fe, b: &Fe, mask: i64) -> Fe {
     let mut result = Fe::zero();
@@ -490,6 +516,7 @@ fn basepoint() -> ExtendedPoint {
     ExtendedPoint::from_bytes(&BASE_Y).unwrap()
 }
 
+
 pub struct Ed25519;
 
 impl Ed25519 {
@@ -498,20 +525,24 @@ impl Ed25519 {
 
         let h = sha512(private_key);
 
+
         let mut s = [0u8; 32];
         s.copy_from_slice(&h[..32]);
         s[0] &= 248;
         s[31] &= 127;
         s[31] |= 64;
+
 
         let b = basepoint();
         let a = b.scalar_mul(&s);
         a.to_bytes()
     }
 
+
     pub fn sign(private_key: &PrivateKey, message: &[u8]) -> Signature {
 
         let h = sha512(private_key);
+
 
         let mut s = [0u8; 32];
         s.copy_from_slice(&h[..32]);
@@ -519,9 +550,11 @@ impl Ed25519 {
         s[31] &= 127;
         s[31] |= 64;
 
+
         let b = basepoint();
         let a_point = b.scalar_mul(&s);
         let a = a_point.to_bytes();
+
 
         let mut hasher_r = Sha512::new();
         hasher_r.update(&h[32..]);
@@ -529,8 +562,10 @@ impl Ed25519 {
         let r_hash = hasher_r.finalize();
         let r = sc_reduce(&r_hash);
 
+
         let r_point = b.scalar_mul(&r);
         let r_bytes = r_point.to_bytes();
+
 
         let mut hasher_k = Sha512::new();
         hasher_k.update(&r_bytes);
@@ -538,6 +573,7 @@ impl Ed25519 {
         hasher_k.update(message);
         let k_hash = hasher_k.finalize();
         let k = sc_reduce(&k_hash);
+
 
         let s_scalar = sc_muladd(&k, &s, &r);
 
@@ -547,6 +583,7 @@ impl Ed25519 {
         Signature(sig)
     }
 
+
     pub fn verify(public_key: &PublicKey, message: &[u8], signature: &Signature) -> bool {
 
         let a_point = match ExtendedPoint::from_bytes(public_key) {
@@ -554,10 +591,12 @@ impl Ed25519 {
             None => return false,
         };
 
+
         let s = &signature.0[32..];
         if !sc_is_valid(s) {
             return false;
         }
+
 
         let mut hasher = Sha512::new();
         hasher.update(&signature.0[..32]);
@@ -565,6 +604,7 @@ impl Ed25519 {
         hasher.update(message);
         let k_hash = hasher.finalize();
         let k = sc_reduce(&k_hash);
+
 
         let b = basepoint();
         let mut s_bytes = [0u8; 32];
@@ -579,6 +619,7 @@ impl Ed25519 {
         let ka = a_point.scalar_mul(&k);
         let rhs = r_point.add(&ka);
 
+
         let lhs_bytes = sb.to_bytes();
         let rhs_bytes = rhs.to_bytes();
 
@@ -586,15 +627,18 @@ impl Ed25519 {
     }
 }
 
+
 const L: [i64; 12] = [
     0x1cf5d3ed, 0x009318d2, 0x1de73596, 0x1df3bd45,
     0x0000014d, 0x00000000, 0x00000000, 0x00000000,
     0x00000000, 0x00000000, 0x00000000, 0x00200000,
 ];
 
+
 fn sc_reduce(s: &[u8; 64]) -> [u8; 32] {
 
     let mut a = [0i64; 24];
+
 
     a[0] = 0x1fffff & load_3_i64(&s[0..3]);
     a[1] = 0x1fffff & (load_4_i64(&s[2..6]) >> 5);
@@ -621,7 +665,9 @@ fn sc_reduce(s: &[u8; 64]) -> [u8; 32] {
     a[22] = 0x1fffff & (load_4_i64(&s[57..61]) >> 6);
     a[23] = load_4_i64(&s[60..64]) >> 3;
 
+
     sc_reduce_limbs(&mut a);
+
 
     let mut out = [0u8; 32];
     out[0] = a[0] as u8;
@@ -660,11 +706,14 @@ fn sc_reduce(s: &[u8; 64]) -> [u8; 32] {
     out
 }
 
+
 fn sc_reduce_limbs(a: &mut [i64; 24]) {
+
 
     for i in (12..24).rev() {
         let q = a[i];
         if q == 0 { continue; }
+
 
         let shift = i - 11;
         a[shift + 0] -= q * 0x1cf5d3ed;
@@ -676,6 +725,7 @@ fn sc_reduce_limbs(a: &mut [i64; 24]) {
         a[shift + 11] -= q * 0x00200000;
         a[i] = 0;
     }
+
 
     for _ in 0..2 {
         for i in 0..11 {
@@ -692,8 +742,10 @@ fn sc_reduce_limbs(a: &mut [i64; 24]) {
         }
     }
 
+
     let mut borrow = 0i64;
     let mut tmp = [0i64; 12];
+
 
     tmp[0] = a[0] - 0x1cf5d3ed;
     tmp[1] = a[1] - 0x009318d2;
@@ -708,6 +760,7 @@ fn sc_reduce_limbs(a: &mut [i64; 24]) {
     tmp[10] = a[10];
     tmp[11] = a[11] - 0x00200000;
 
+
     for i in 0..11 {
         tmp[i] += borrow;
         borrow = tmp[i] >> 63;
@@ -719,6 +772,7 @@ fn sc_reduce_limbs(a: &mut [i64; 24]) {
         }
     }
     tmp[11] += borrow;
+
 
     let mask = !(tmp[11] >> 63);
     for i in 0..12 {
@@ -734,11 +788,13 @@ fn load_4_i64(s: &[u8]) -> i64 {
     (s[0] as i64) | ((s[1] as i64) << 8) | ((s[2] as i64) << 16) | ((s[3] as i64) << 24)
 }
 
+
 fn sc_muladd(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32]) -> [u8; 32] {
 
     let a_limbs = sc_load(a);
     let b_limbs = sc_load(b);
     let c_limbs = sc_load(c);
+
 
     let mut product = [0i64; 24];
     for i in 0..12 {
@@ -747,9 +803,11 @@ fn sc_muladd(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32]) -> [u8; 32] {
         }
     }
 
+
     for i in 0..12 {
         product[i] += c_limbs[i];
     }
+
 
     for i in 0..23 {
         let carry = product[i] >> 21;
@@ -757,7 +815,9 @@ fn sc_muladd(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32]) -> [u8; 32] {
         product[i + 1] += carry;
     }
 
+
     sc_reduce_limbs(&mut product);
+
 
     let mut out = [0u8; 32];
     out[0] = product[0] as u8;
@@ -796,6 +856,7 @@ fn sc_muladd(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32]) -> [u8; 32] {
     out
 }
 
+
 fn sc_load(s: &[u8; 32]) -> [i64; 12] {
     let mut a = [0i64; 12];
     a[0] = 0x1fffff & load_3_i64(&s[0..3]);
@@ -813,11 +874,13 @@ fn sc_load(s: &[u8; 32]) -> [i64; 12] {
     a
 }
 
+
 fn sc_is_valid(s: &[u8]) -> bool {
 
     if s.len() != 32 {
         return false;
     }
+
 
     const L: [u8; 32] = [
         0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58,
@@ -826,16 +889,20 @@ fn sc_is_valid(s: &[u8]) -> bool {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,
     ];
 
+
     let mut borrow: i16 = 0;
 
     for i in 0..32 {
         let diff = (s[i] as i16) - (L[i] as i16) - borrow;
 
+
         borrow = (diff >> 15) & 1;
     }
 
+
     borrow == 1
 }
+
 
 struct Sha512 {
     state: [u64; 8],
@@ -998,4 +1065,61 @@ fn sha512(data: &[u8]) -> [u8; 64] {
     let mut hasher = Sha512::new();
     hasher.update(data);
     hasher.finalize()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_key_generation() {
+        let private_key: [u8; 32] = [
+            0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60,
+            0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
+            0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
+            0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
+        ];
+        let expected_public: [u8; 32] = [
+            0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7,
+            0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a,
+            0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
+            0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
+        ];
+
+        let public_key = Ed25519::public_key(&private_key);
+        assert_eq!(public_key, expected_public);
+    }
+
+    #[test]
+    fn test_sign_verify_empty() {
+        let private_key: [u8; 32] = [
+            0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60,
+            0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
+            0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
+            0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
+        ];
+        let public_key = Ed25519::public_key(&private_key);
+        let message = b"";
+
+        let signature = Ed25519::sign(&private_key, message);
+        assert!(Ed25519::verify(&public_key, message, &signature));
+    }
+
+    #[test]
+    fn test_sign_verify_message() {
+        let private_key: [u8; 32] = [
+            0xc5, 0xaa, 0x8d, 0xf4, 0x3f, 0x9f, 0x83, 0x7b,
+            0xed, 0xb7, 0x44, 0x2f, 0x31, 0xdc, 0xb7, 0xb1,
+            0x66, 0xd3, 0x85, 0x35, 0x07, 0x6f, 0x09, 0x4b,
+            0x85, 0xce, 0x3a, 0x2e, 0x0b, 0x44, 0x58, 0xf7,
+        ];
+        let public_key = Ed25519::public_key(&private_key);
+        let message = b"test message";
+
+        let signature = Ed25519::sign(&private_key, message);
+        assert!(Ed25519::verify(&public_key, message, &signature));
+
+
+        assert!(!Ed25519::verify(&public_key, b"wrong message", &signature));
+    }
 }

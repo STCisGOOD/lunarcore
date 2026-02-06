@@ -1,6 +1,7 @@
 use super::hmac::HmacSha256;
 use super::sha256::DIGEST_SIZE;
 
+
 pub struct Hkdf;
 
 impl Hkdf {
@@ -14,6 +15,7 @@ impl Hkdf {
         HmacSha256::mac(salt, ikm)
     }
 
+
     pub fn expand(prk: &[u8; DIGEST_SIZE], info: &[u8], okm: &mut [u8]) {
         let n = (okm.len() + DIGEST_SIZE - 1) / DIGEST_SIZE;
         assert!(n <= 255, "Output too long");
@@ -23,6 +25,7 @@ impl Hkdf {
 
         for i in 1..=n {
             let mut hmac = HmacSha256::new(prk);
+
 
             if i > 1 {
                 hmac.update(&t);
@@ -38,10 +41,12 @@ impl Hkdf {
         }
     }
 
+
     pub fn derive(salt: &[u8], ikm: &[u8], info: &[u8], okm: &mut [u8]) {
         let prk = Self::extract(salt, ikm);
         Self::expand(&prk, info, okm);
     }
+
 
     pub fn derive_key<const N: usize>(salt: &[u8], ikm: &[u8], info: &[u8]) -> [u8; N] {
         let mut key = [0u8; N];
@@ -50,13 +55,17 @@ impl Hkdf {
     }
 }
 
+
 pub mod reticulum {
     use super::*;
     use crate::crypto::sha256::Sha256;
 
+
     pub const IDENTITY_HASH_SIZE: usize = 16;
 
+
     pub const FULL_HASH_SIZE: usize = 32;
+
 
     pub fn identity_hash(signing_key: &[u8; 32], encryption_key: &[u8; 32]) -> [u8; IDENTITY_HASH_SIZE] {
         let mut hasher = Sha256::new();
@@ -69,12 +78,14 @@ pub mod reticulum {
         hash
     }
 
+
     pub fn full_identity_hash(signing_key: &[u8; 32], encryption_key: &[u8; 32]) -> [u8; FULL_HASH_SIZE] {
         let mut hasher = Sha256::new();
         hasher.update(signing_key);
         hasher.update(encryption_key);
         hasher.finalize()
     }
+
 
     pub fn derive_link_keys(
         shared_secret: &[u8; 32],
@@ -103,33 +114,40 @@ pub mod reticulum {
         }
     }
 
+
     pub struct LinkKeys {
         pub tx_key: [u8; 32],
         pub rx_key: [u8; 32],
     }
 }
 
+
 pub mod meshcore {
     use super::*;
+
 
     pub fn derive_channel_key(psk: &[u8], channel_id: u8) -> [u8; 32] {
         let info = [b'C', b'H', channel_id];
         Hkdf::derive_key(b"meshcore", psk, &info)
     }
 
+
     pub fn derive_node_key(identity: &[u8; 32], purpose: &[u8]) -> [u8; 32] {
         Hkdf::derive_key(b"meshcore-node", identity, purpose)
     }
 }
 
+
 pub mod meshtastic {
     use super::*;
     use crate::crypto::sha256::Sha256;
+
 
     pub const DEFAULT_KEY: [u8; 16] = [
         0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
         0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01
     ];
+
 
     pub fn derive_channel_key(channel_name: &str) -> [u8; 32] {
 
@@ -137,13 +155,86 @@ pub mod meshtastic {
         hash
     }
 
+
     pub fn derive_nonce(packet_id: u32, sender: u32) -> [u8; 16] {
         let mut nonce = [0u8; 16];
 
         nonce[..4].copy_from_slice(&packet_id.to_le_bytes());
 
+
         nonce[8..12].copy_from_slice(&sender.to_le_bytes());
 
         nonce
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rfc5869_vector1() {
+
+        let ikm: [u8; 22] = [0x0b; 22];
+        let salt: [u8; 13] = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0a, 0x0b, 0x0c,
+        ];
+        let info: [u8; 10] = [
+            0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
+            0xf8, 0xf9,
+        ];
+
+        let prk = Hkdf::extract(&salt, &ikm);
+
+        let expected_prk: [u8; 32] = [
+            0x07, 0x77, 0x09, 0x36, 0x2c, 0x2e, 0x32, 0xdf,
+            0x0d, 0xdc, 0x3f, 0x0d, 0xc4, 0x7b, 0xba, 0x63,
+            0x90, 0xb6, 0xc7, 0x3b, 0xb5, 0x0f, 0x9c, 0x31,
+            0x22, 0xec, 0x84, 0x4a, 0xd7, 0xc2, 0xb3, 0xe5,
+        ];
+
+        assert_eq!(prk, expected_prk);
+
+        let mut okm = [0u8; 42];
+        Hkdf::expand(&prk, &info, &mut okm);
+
+        let expected_okm: [u8; 42] = [
+            0x3c, 0xb2, 0x5f, 0x25, 0xfa, 0xac, 0xd5, 0x7a,
+            0x90, 0x43, 0x4f, 0x64, 0xd0, 0x36, 0x2f, 0x2a,
+            0x2d, 0x2d, 0x0a, 0x90, 0xcf, 0x1a, 0x5a, 0x4c,
+            0x5d, 0xb0, 0x2d, 0x56, 0xec, 0xc4, 0xc5, 0xbf,
+            0x34, 0x00, 0x72, 0x08, 0xd5, 0xb8, 0x87, 0x18,
+            0x58, 0x65,
+        ];
+
+        assert_eq!(okm, expected_okm);
+    }
+
+    #[test]
+    fn test_derive_key() {
+        let key: [u8; 16] = Hkdf::derive_key(b"salt", b"secret", b"info");
+        assert_eq!(key.len(), 16);
+
+
+        let key2: [u8; 16] = Hkdf::derive_key(b"salt", b"secret", b"info");
+        assert_eq!(key, key2);
+
+
+        let key3: [u8; 16] = Hkdf::derive_key(b"salt", b"secret", b"other");
+        assert_ne!(key, key3);
+    }
+
+    #[test]
+    fn test_meshtastic_nonce() {
+        let nonce = meshtastic::derive_nonce(0x12345678, 0xDEADBEEF);
+
+        assert_eq!(&nonce[..4], &[0x78, 0x56, 0x34, 0x12]);
+
+        assert_eq!(&nonce[4..8], &[0u8; 4]);
+
+        assert_eq!(&nonce[8..12], &[0xEF, 0xBE, 0xAD, 0xDE]);
+
+        assert_eq!(&nonce[12..], &[0u8; 4]);
     }
 }
