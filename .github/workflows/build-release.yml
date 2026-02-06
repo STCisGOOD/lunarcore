@@ -23,9 +23,9 @@ jobs:
             python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util \
             libusb-1.0-0 pkg-config
 
-      - name: Install espup and espflash
+      - name: Install espup, espflash, and ldproxy
         run: |
-          RUSTUP_TOOLCHAIN=stable cargo install espup espflash
+          RUSTUP_TOOLCHAIN=stable cargo install espup espflash ldproxy
           espup install
           . $HOME/export-esp.sh
           echo "$HOME/.rustup/toolchains/esp/bin" >> $GITHUB_PATH
